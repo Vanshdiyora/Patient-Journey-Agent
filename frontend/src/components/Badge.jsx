@@ -1,5 +1,5 @@
 import React from "react";
-import { statusClass, priorityClass, severityClass, humanize } from "../utils/constants";
+import { statusClass, priorityClass, severityClass, humanize } from "../utils";
 
 /**
  * Badge â€” colored pill for status / priority / severity values.

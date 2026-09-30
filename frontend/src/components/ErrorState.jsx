@@ -1,5 +1,5 @@
 import React from "react";
-import { getErrorMessage } from "../utils/constants";
+import { getErrorMessage } from "../utils";
 
 /**
  * ErrorState â€” friendly failure message for a failed data fetch,

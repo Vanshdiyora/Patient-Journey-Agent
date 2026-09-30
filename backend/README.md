@@ -66,7 +66,8 @@ python -m venv .venv
 pip install -r requirements.txt
 copy .env.example .env
 # edit .env and set DATABASE_URL to match your local PostgreSQL credentials
-uvicorn app.main:app --reload
+cd "C:\Work\AZDES\Agents\Patient Journey Orchestrator\code\backend"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The backend reads `.env` from the backend project directory, regardless of the

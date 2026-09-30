@@ -3,58 +3,62 @@ import {
   UserCog, Users,
 } from "lucide-react";
 import { ROLES, roleOf } from "../utils/roles";
-
-const STAFF = [ROLES.ADMIN, ROLES.CLINICIAN, ROLES.CARE_COORDINATOR];
+import { PATHS } from "../routes/paths";
 
 /**
  * Portal identity per role: label shown in the chrome, a theme class that
- * recolors the shell, and the nav items each portal shows.
- * `visible` is presentation-only; the backend still authorizes every API.
+ * recolors the shell, the nav items each portal shows, and the role label
+ * rendered beside the user's name in the sidebar.
+ * Everything here is presentation-only; the backend still authorizes every API.
  */
 export const PORTALS = {
   [ROLES.ADMIN]: {
     id: "admin",
     label: "Admin Console",
+    roleLabel: "Admin",
     theme: "theme-admin",
     items: [
-      { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-      { to: "/patients", label: "Patients", icon: Users },
-      { to: "/journeys", label: "Patient journeys", icon: Network },
-      { to: "/exceptions", label: "Exceptions", icon: AlertTriangle },
-      { to: "/agent-runs", label: "Agent activity", icon: Bot },
-      { to: "/actions", label: "Action registry", icon: Activity },
-      { to: "/users", label: "User management", icon: UserCog, adminOnly: true },
+      { to: PATHS.home, label: "Overview", icon: LayoutDashboard, end: true },
+      { to: PATHS.patients, label: "Patients", icon: Users },
+      { to: PATHS.journeys, label: "Patient journeys", icon: Network },
+      { to: PATHS.exceptions, label: "Exceptions", icon: AlertTriangle },
+      { to: PATHS.agentRuns, label: "Agent activity", icon: Bot },
+      { to: PATHS.actions, label: "Action registry", icon: Activity },
+      { to: PATHS.users, label: "User management", icon: UserCog, adminOnly: true },
     ],
   },
   [ROLES.CLINICIAN]: {
     id: "clinician",
     label: "Clinician Portal",
+    roleLabel: "Clinician",
     theme: "theme-clinician",
     items: [
-      { to: "/", label: "Clinical overview", icon: LayoutDashboard, end: true },
-      { to: "/patients", label: "My patients", icon: Users },
-      { to: "/journeys", label: "Journeys", icon: Network },
-      { to: "/exceptions", label: "Clinical exceptions", icon: AlertTriangle },
+      { to: PATHS.home, label: "Clinical overview", icon: LayoutDashboard, end: true },
+      { to: PATHS.patients, label: "My patients", icon: Users },
+      { to: PATHS.journeys, label: "Journeys", icon: Network },
+      { to: PATHS.exceptions, label: "Clinical exceptions", icon: AlertTriangle },
     ],
   },
   [ROLES.CARE_COORDINATOR]: {
     id: "coordinator",
     label: "Coordination Portal",
+    roleLabel: "Care Coordinator",
     theme: "theme-coordinator",
     items: [
-      { to: "/", label: "Coordination overview", icon: LayoutDashboard, end: true },
-      { to: "/patients", label: "Patients", icon: Users },
-      { to: "/journeys", label: "Journeys", icon: Network },
-      { to: "/exceptions", label: "Follow-up queue", icon: AlertTriangle },
-      { to: "/actions", label: "Task history", icon: Activity },
+      { to: PATHS.home, label: "Coordination overview", icon: LayoutDashboard, end: true },
+      { to: PATHS.patients, label: "Patients", icon: Users },
+      { to: PATHS.journeys, label: "Journeys", icon: Network },
+      { to: PATHS.exceptions, label: "Follow-up queue", icon: AlertTriangle },
+      { to: PATHS.actions, label: "Task history", icon: Activity },
     ],
   },
   [ROLES.PATIENT]: {
     id: "patient",
     label: "My Health",
+    roleLabel: "Patient",
     theme: "theme-patient",
     items: [
-      { to: "/my-journey", label: "My Journey", icon: HeartPulse, end: true },
+      { to: PATHS.myJourney, label: "My Journey", icon: HeartPulse, end: true },
     ],
   },
 };

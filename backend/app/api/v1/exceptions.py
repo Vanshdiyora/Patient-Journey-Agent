@@ -9,6 +9,19 @@ from app.schemas import ExceptionResponse, ExceptionUpdate
 
 router = APIRouter()
 
+VALID_STATUSES = ("OPEN", "IN_PROGRESS", "RESOLVED", "DISMISSED")
+VALID_SEVERITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+
+def _normalize(value: str | None, valid: tuple[str, ...], field: str) -> str:
+    """Accept any case (UI sends lowercase; the DB enum is uppercase)."""
+    if not value:
+        raise HTTPException(422, f"{field} is required")
+    v = value.strip().upper()
+    if v not in valid:
+        raise HTTPException(422, f"{field} must be one of: {', '.join(valid)}")
+    return v
+
 
 @router.get("/exceptions", response_model=list[ExceptionResponse])
 def exceptions(
@@ -27,9 +40,18 @@ def exceptions(
     if patient_ids is not None:
         q = q.filter(Journey.patient_id.in_(patient_ids))
     if status:
-        q = q.filter(ExceptionRecord.status == status)
+        # Case-insensitive, comma-separated: "open,in_progress" works too.
+        wanted = [s.strip().upper() for s in status.split(",") if s.strip()]
+        unknown = [s for s in wanted if s not in VALID_STATUSES]
+        if unknown:
+            raise HTTPException(422, f"Unknown status: {', '.join(unknown)}")
+        q = q.filter(ExceptionRecord.status.in_(wanted))
     if severity:
-        q = q.filter(ExceptionRecord.severity == severity)
+        wanted = [s.strip().upper() for s in severity.split(",") if s.strip()]
+        unknown = [s for s in wanted if s not in VALID_SEVERITIES]
+        if unknown:
+            raise HTTPException(422, f"Unknown severity: {', '.join(unknown)}")
+        q = q.filter(ExceptionRecord.severity.in_(wanted))
     return q.order_by(ExceptionRecord.created_at.desc()).limit(limit).all()
 
 
@@ -49,10 +71,14 @@ def update_exception(
     if not journey or not can_read_journey(user, journey):
         raise HTTPException(404, "Exception not found")
 
-    item.status = data.status
+    # The DB enum is uppercase; the UI sends lowercase. Normalize server-side so
+    # resolves work regardless of the caller's case.
+    item.status = _normalize(data.status, VALID_STATUSES, "status")
     item.recommended_action = data.recommended_action
-    if data.status in {"RESOLVED", "DISMISSED"}:
+    if item.status in {"RESOLVED", "DISMISSED"}:
         item.resolved_at = datetime.now(timezone.utc)
+    else:
+        item.resolved_at = None
     db.commit()
     db.refresh(item)
     return item

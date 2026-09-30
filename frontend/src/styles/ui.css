@@ -1,0 +1,111 @@
+/* Shared UI primitives: buttons, headings, metric cards, panels, tables,
+   badges, banners, empty/error/skeleton states, toolbars, pagination, tabs. */
+
+.page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:24px}
+.page-heading h1{font:800 28px "Manrope",sans-serif;letter-spacing:-.8px;margin:6px 0 5px}
+.page-heading p{margin:0;color:var(--muted);font-size:13px}
+.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:1.3px;color:#758581;font-weight:700}
+.eyebrow--teal{color:var(--teal)}
+.button-group{display:flex;gap:9px}
+
+.primary-btn,.secondary-btn{height:38px;padding:0 14px;border-radius:9px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:600;transition:.15s}
+.primary-btn{background:var(--teal);color:#fff;box-shadow:0 4px 12px rgba(11,113,107,.18)}
+.primary-btn:hover{background:#075f59}
+.primary-btn:disabled,.secondary-btn:disabled{opacity:.6;cursor:not-allowed}
+.primary-btn--full{width:100%;height:44px}
+.secondary-btn{background:#fff;border-color:var(--line);color:#455652}
+.secondary-btn:hover{border-color:#c8d2cf;background:#f9fbfb}
+.text-link,.table-link{color:var(--teal);font-weight:600;font-size:11px;display:inline-flex;align-items:center;gap:4px}
+
+.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.metric-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:17px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:relative;min-width:0}
+.metric-icon{width:39px;height:39px;border-radius:10px;display:grid;place-items:center;flex:none}
+.metric-icon--teal{background:var(--teal-2);color:var(--teal)}
+.metric-icon--blue{background:var(--blue-2);color:var(--blue)}
+.metric-icon--amber{background:var(--amber-2);color:var(--amber)}
+.metric-icon--green{background:var(--green-2);color:var(--green)}
+.metric-copy{display:flex;flex-direction:column;min-width:0}
+.metric-copy span{font-size:11px;color:var(--muted)}
+.metric-copy strong{font:800 24px "Manrope";line-height:1.2}
+.metric-copy small{font-size:10px;color:#899592}
+.metric-arrow{margin-left:auto;color:#b4c0bd}
+
+.content-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px}
+.content-grid--dashboard{grid-template-columns:minmax(0,1.9fr) minmax(280px,.8fr)}
+.content-grid--journey{grid-template-columns:minmax(0,1.55fr) minmax(320px,.85fr)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;min-width:0}
+.panel--wide{min-width:0}
+.panel-header{padding:17px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:15px}
+.panel-header h3{font:700 14px "Manrope";margin:0 0 3px}
+.panel-header p{font-size:11px;color:var(--muted);margin:0}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:680px}
+th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:#84918f;font-weight:700;padding:11px 18px;background:#fbfcfc;border-bottom:1px solid var(--line)}
+td{padding:13px 18px;border-bottom:1px solid #edf0f0;font-size:11px;color:#445450;vertical-align:middle}
+tbody tr:hover{background:#fbfdfc}
+tbody tr:last-child td{border-bottom:0}
+.table-primary{display:block;font-weight:700;color:#243633}
+.table-secondary{display:block;color:#8a9794;font-size:10px;margin-top:3px}
+.person-cell{display:flex;align-items:center;gap:10px}
+.person-avatar{width:32px;height:32px;border-radius:9px;background:#e5f2f0;color:#17716a;display:grid;place-items:center;font-size:10px;font-weight:700}
+.person-avatar--large{width:62px;height:62px;border-radius:16px;font-size:17px}
+.person-cell span{display:block;color:#8a9794;font-size:10px;margin-top:2px}
+code{font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#5f6f6b;background:#f3f6f5;padding:3px 6px;border-radius:5px}
+
+.status,.priority,.severity{display:inline-flex;align-items:center;border-radius:20px;padding:4px 8px;font-size:9px;font-weight:700;white-space:nowrap}
+.status--active{background:var(--teal-2);color:var(--teal)}
+.status--completed{background:var(--green-2);color:var(--green)}
+.status--pending{background:var(--amber-2);color:var(--amber)}
+.status--danger{background:var(--red-2);color:var(--red)}
+.status--muted{background:#f0f2f2;color:#6e7b78}
+.status--neutral{background:#eef2f1;color:#667571}
+.priority--high{background:#fff0f1;color:#b53d45}
+.priority--medium{background:#fff7e5;color:#9a6a17}
+.priority--normal{background:#edf5ff;color:#4265a5}
+.priority--low{background:#f1f3f3;color:#6f7b79}
+
+.alert-banner{border:1px solid #dce8e6;background:#f6fbfa;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;font-size:11px;margin-bottom:16px;color:#31504b}
+.alert-banner strong{display:block;font-size:11px}
+.alert-banner span{flex:1}
+.alert-banner button{border:0;background:none;color:var(--teal);font-weight:700;font-size:11px}
+.alert-banner--error{background:#fff6f6;border-color:#f0d3d5;color:#9c3d43}
+.alert-banner--success{background:#f1fbf5;border-color:#cfead9;color:#1d7045}
+
+.empty-state{min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#9aa6a3;text-align:center;padding:30px}
+.empty-state strong{color:#51615e;font-size:12px}
+.empty-state span{font-size:11px;max-width:340px}
+.empty-state--small{min-height:130px}
+.skeleton-list{padding:8px 18px}
+.skeleton-row{display:grid;grid-template-columns:1.3fr 1fr .7fr .6fr;gap:20px;padding:17px 0;border-bottom:1px solid #edf0f0}
+.skeleton-row i{height:9px;background:linear-gradient(90deg,#edf1f0,#f7f9f9,#edf1f0);border-radius:5px;animation:shimmer 1.4s infinite}
+.skeleton-detail{padding:40px}
+.skeleton-detail i{display:block;height:80px;background:#edf1f0;border-radius:12px;margin-bottom:14px;animation:shimmer 1.4s infinite}
+.mini-loader{height:180px;background:linear-gradient(90deg,#f5f7f7,#fafbfb,#f5f7f7);animation:shimmer 1.3s infinite}
+.button-spinner,.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.search-field{width:min(420px,100%);height:37px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 10px;color:#8c9996;background:#fcfdfd}
+.search-field input{border:0;outline:0;width:100%;font-size:11px;background:transparent}
+.filter-group{display:flex;align-items:center;gap:7px;color:#82908d}
+.filter-group select{height:34px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:0 9px;color:#52615e;font-size:11px;outline:0}
+.result-count{display:flex;align-items:center;gap:6px;color:#82908d;font-size:10px}
+.pagination{border-top:1px solid var(--line);padding:11px 18px;display:flex;justify-content:space-between;align-items:center;color:#899592;font-size:10px}
+.pagination div{display:flex;gap:6px}
+
+/* Portal page tabs (My Journey / Patients). */
+.tab-bar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tab-btn{border:0;background:transparent;padding:10px 14px;font-size:12px;font-weight:600;color:#71807c;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+.tab-btn:hover{color:var(--teal)}
+.tab-btn--active{color:var(--teal);border-bottom-color:var(--teal)}
+.tab-bar--inset{margin-bottom:0;padding:0 18px}
+.tab-count{font-size:9px;font-weight:800;background:#eef3f2;color:#687572;border-radius:20px;padding:2px 7px}
+.tab-btn--active .tab-count{background:var(--teal-2);color:var(--teal)}
+
+.not-found{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#84918e}
+.not-found h1{font:800 28px "Manrope";color:#20322f;margin:0}
+.not-found p{font-size:12px;margin:0 0 10px}
+
+@keyframes shimmer{0%{opacity:.55}50%{opacity:1}100%{opacity:.55}}
+@keyframes spin{to{transform:rotate(360deg)}}

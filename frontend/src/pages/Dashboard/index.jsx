@@ -1,19 +1,15 @@
 import React from "react";
 import {
-  AlertTriangle, Bot, CheckCircle2, Clock3, Network, RefreshCw,
-  ShieldCheck, UserCog, Users, Zap, HeartPulse, Activity
+  AlertTriangle, CheckCircle2, Clock3, Network, RefreshCw, UserCog, Users,
 } from "lucide-react";
-import { Link } from "react-router-dom";
-import { dashboardApi, healthApi } from "../services/api";
-import { useAsync } from "../hooks/useAsync";
-import { useAuth } from "../context/AuthContext";
-import { formatDate, humanize, toList } from "../utils/constants";
-import { isAdmin, isCoordinator, portalName } from "../utils/roles";
-import { PageHeading, Panel, EmptyState, Badge, MetricCard, SkeletonRows, AlertBanner } from "../components";
-
-function Pulse({ icon: Icon, label, value }) {
-  return <div className="pulse-row"><Icon size={17} /><span>{label}</span><b>{value}</b></div>;
-}
+import { dashboardApi, healthApi } from "../../services";
+import { useAuth } from "../../context/AuthContext";
+import { useAsync } from "../../hooks/useAsync";
+import { toList } from "../../utils";
+import { isAdmin, isCoordinator, portalName } from "../../utils/roles";
+import { PageHeading, MetricCard, AlertBanner } from "../../components";
+import RecentJourneys from "./RecentJourneys";
+import SystemPulse from "./SystemPulse";
 
 /** Role-specific metric configuration. Each portal sees its own KPIs. */
 function metricsFor(user, d) {
@@ -78,35 +74,8 @@ export default function Dashboard() {
     </AlertBanner>}
 
     <div className="content-grid content-grid--dashboard">
-      <Panel wide title="Recent patient journeys" subtitle={d.scope === "assigned" ? "Within your assigned scope" : "Latest pathway activity"}
-        action={<Link className="text-link" to="/journeys">View all</Link>}>
-        {loading ? <SkeletonRows count={5} /> : recent.length ? (
-          <div className="table-wrap"><table>
-            <thead><tr><th>Patient</th><th>Journey</th><th>Priority</th><th>Status</th><th>Updated</th></tr></thead>
-            <tbody>{recent.slice(0, 7).map((j, i) => (
-              <tr key={j.id || i}>
-                <td><Link className="table-primary" to={`/patients/${j.patient_id}`}>{j.patient_reference || j.patient_name || `Patient ${String(j.patient_id || "").slice(0, 8)}`}</Link></td>
-                <td>{humanize(j.pathway_name || j.pathway_id || "Care pathway")}</td>
-                <td><Badge kind="priority" value={j.priority || "normal"} /></td>
-                <td><Badge kind="status" value={j.status || "active"} /></td>
-                <td>{formatDate(j.updated_at || j.created_at || j.started_at, true)}</td>
-              </tr>
-            ))}</tbody>
-          </table></div>
-        ) : <EmptyState icon={Network} title="No recent journeys" text="Journey activity will appear here when data is available." />}
-      </Panel>
-
-      <Panel title="System pulse" subtitle="Service availability">
-        <div className="pulse-card">
-          <span className={`pulse-dot ${health.loading ? "pulse-dot--loading" : ""}`} />
-          <div><strong>{health.error ? "API unavailable" : "API operational"}</strong><span>{health.error ? "Unable to reach health endpoint" : "All core services responding"}</span></div>
-        </div>
-        <div className="pulse-list">
-          <Pulse icon={ShieldCheck} label="Authentication" value="Email and password" />
-          <Pulse icon={admin ? UserCog : Bot} label={admin ? "Identity store" : "Orchestration"} value={admin ? `${d.active_users ?? "—"} active` : "Ready"} />
-          <Pulse icon={admin ? Activity : Zap} label={admin ? "Audit trail" : "Agent runtime"} value={admin ? "Recording" : "Connected"} />
-        </div>
-      </Panel>
+      <RecentJourneys loading={loading} recent={recent} scope={d.scope} />
+      <SystemPulse health={health} summary={d} isAdmin={admin} />
     </div>
   </div>;
 }

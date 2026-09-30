@@ -8,5 +8,6 @@ export { default as JsonView } from "./JsonView";
 export { default as AlertBanner } from "./AlertBanner";
 export { default as MetricCard } from "./MetricCard";
 export { default as Brand } from "./Brand";
+export { default as TabBar } from "./TabBar";
 export { SkeletonRows, DetailSkeleton } from "./Skeletons";
 export { SearchBox, FilterSelect, ResultCount } from "./Toolbar";

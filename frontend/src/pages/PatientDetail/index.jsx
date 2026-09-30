@@ -1,10 +1,10 @@
 import React from "react";
 import { ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Network, UserRound } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import { patientsApi } from "../services/api";
-import { useAsync } from "../hooks/useAsync";
-import { formatDate, initials, humanize, toList } from "../utils/constants";
-import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton } from "../components";
+import { patientsApi } from "../../services";
+import { useAsync } from "../../hooks/useAsync";
+import { formatDate, initials, humanize, toList } from "../../utils";
+import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton } from "../../components";
 
 function Detail({ label, value }) {
   return <div className="detail-row"><span>{label}</span><strong>{value || "—"}</strong></div>;

@@ -1,0 +1,19 @@
+/*
+ * Styles entrypoint — imports layers in cascade order. Feature code imports
+ * "../styles" (this file) only; never individual layers.
+ *
+ * Order matters:
+ *   1. tokens      — design tokens + element resets
+ *   2. base        — (reserved) global element defaults
+ *   3. layout      — shell, sidebar, topbar, portal part accents
+ *   4. ui          — shared primitives (buttons, panels, tables, badges…)
+ *   5. pages       — feature-page specifics
+ *   6. portals     — portal accent variables
+ *   7. responsive  — media queries last so they can override anything above
+ */
+@import "./tokens.css";
+@import "./layout.css";
+@import "./ui.css";
+@import "./pages.css";
+@import "./portals.css";
+@import "./responsive.css";

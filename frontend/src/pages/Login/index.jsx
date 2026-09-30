@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { ArrowRight, CheckCircle2, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import Brand from "../components/Brand";
-import { getErrorMessage } from "../utils/constants";
+import { useAuth } from "../../context/AuthContext";
+import Brand from "../../components/Brand";
+import { getErrorMessage } from "../../utils";
 
 export default function Login() {
   const { login } = useAuth();

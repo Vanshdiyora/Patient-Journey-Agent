@@ -12,13 +12,77 @@ from app.core.authorization import (
     scope_patient_ids,
     scope_note,
 )
-from app.models import Journey, JourneyStep, PatientEvent, Patient, PathwayStep
+from app.models import Journey, JourneyStep, PatientEvent, Patient, PathwayStep, Pathway
 from app.schemas import JourneyResponse, JourneyStepResponse
 from app.orchestration.journey_engine import JourneyEngine
 from app.orchestration.langgraph_supervisor import SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
 
 router = APIRouter()
+
+VALID_STATUSES = ("ACTIVE", "BLOCKED", "COMPLETED", "CANCELLED")
+VALID_PRIORITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+
+
+def _normalize_filter(raw: str | None, valid: tuple[str, ...]) -> list[str]:
+    """
+    Accept comma-separated values in any case (UI sends lowercase; the DB enum
+    is uppercase, e.g. "active,blocked" -> ["ACTIVE", "BLOCKED"]).
+    """
+    if not raw:
+        return []
+    values = []
+    for part in raw.split(","):
+        part = part.strip().upper()
+        if not part:
+            continue
+        if part not in valid:
+            raise HTTPException(422, f"Unknown value: {part}")
+        values.append(part)
+    return values
+
+
+def _with_patient_names(db: Session, journeys: list[Journey]) -> list[dict]:
+    """Serialize journeys with patient identity so panels can show real names."""
+    patient_ids = {j.patient_id for j in journeys}
+    patients = (
+        db.query(Patient)
+        .filter(Patient.id.in_(patient_ids))
+        .all()
+        if patient_ids
+        else []
+    )
+    by_id = {p.id: p for p in patients}
+    pathways = (
+        db.query(Pathway)
+        .filter(Pathway.id.in_({j.pathway_id for j in journeys}))
+        .all()
+        if patient_ids
+        else []
+    )
+    pathway_names = {w.id: w.name for w in pathways}
+    rows = []
+    for j in journeys:
+        p = by_id.get(j.patient_id)
+        rows.append(
+            {
+                "id": j.id,
+                "patient_id": j.patient_id,
+                "pathway_id": j.pathway_id,
+                "pathway_version": j.pathway_version,
+                "status": j.status,
+                "priority": j.priority,
+                "started_at": j.started_at,
+                "target_completion_at": j.target_completion_at,
+                "completed_at": j.completed_at,
+                "created_at": j.created_at,
+                "updated_at": j.updated_at,
+                "patient_name": f"{p.first_name} {p.last_name}" if p else None,
+                "patient_reference": p.patient_reference if p else None,
+                "pathway_name": pathway_names.get(j.pathway_id),
+            }
+        )
+    return rows
 
 
 @router.get("/journeys")
@@ -34,13 +98,16 @@ def list_journeys(
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None:
         q = q.filter(Journey.patient_id.in_(patient_ids))
-    if status:
-        q = q.filter(Journey.status == status)
-    if priority:
-        q = q.filter(Journey.priority == priority)
+    statuses = _normalize_filter(status, VALID_STATUSES)
+    if statuses:
+        q = q.filter(Journey.status.in_(statuses))
+    priorities = _normalize_filter(priority, VALID_PRIORITIES)
+    if priorities:
+        q = q.filter(Journey.priority.in_(priorities))
     total = q.with_entities(func.count()).scalar() or 0
+    items = q.order_by(Journey.updated_at.desc()).offset(offset).limit(limit).all()
     return {
-        "items": q.order_by(Journey.updated_at.desc()).offset(offset).limit(limit).all(),
+        "items": _with_patient_names(db, items),
         "total": total,
         "limit": limit,
         "offset": offset,

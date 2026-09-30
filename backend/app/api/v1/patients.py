@@ -3,24 +3,56 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.authorization import require_staff, can_read_journey, scope_patient_ids
-from app.models import Patient, Journey
+from app.models import Patient, Journey, ExceptionRecord
 from app.schemas import PatientResponse, JourneyResponse
 
 router = APIRouter()
+
+# Role-relevant directory slices for the Patients page tabs. Each value narrows
+# the directory by journey state; which tabs a role SEES is a UI concern, while
+# the backend authorizes every request regardless.
+VALID_FILTERS = ("active", "blocked", "has_exceptions", "high_priority")
+
+
+def _apply_directory_filter(q, db: Session, filter_key: str | None):
+    """Narrow the patient directory by journey/exception state via subquery."""
+    if not filter_key:
+        return q
+    if filter_key == "active":
+        sub = db.query(Journey.patient_id).filter(Journey.status == "ACTIVE")
+        return q.filter(Patient.id.in_(sub))
+    if filter_key == "blocked":
+        sub = db.query(Journey.patient_id).filter(Journey.status == "BLOCKED")
+        return q.filter(Patient.id.in_(sub))
+    if filter_key == "high_priority":
+        sub = db.query(Journey.patient_id).filter(
+            Journey.status == "ACTIVE", Journey.priority.in_(("CRITICAL", "HIGH"))
+        )
+        return q.filter(Patient.id.in_(sub))
+    if filter_key == "has_exceptions":
+        sub = db.query(Journey.patient_id).join(
+            ExceptionRecord, ExceptionRecord.journey_id == Journey.id
+        ).filter(ExceptionRecord.status.in_(("OPEN", "IN_PROGRESS")))
+        return q.filter(Patient.id.in_(sub))
+    return q
 
 
 @router.get("/patients")
 def list_patients(
     search: str | None = None,
+    filter: str | None = Query(None, description=f"One of: {', '.join(VALID_FILTERS)}"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(require_staff),
 ):
+    if filter and filter not in VALID_FILTERS:
+        raise HTTPException(422, f"filter must be one of: {', '.join(VALID_FILTERS)}")
     q = db.query(Patient)
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None:
         q = q.filter(Patient.id.in_(patient_ids))
+    q = _apply_directory_filter(q, db, filter)
     if search:
         term = f"%{search}%"
         q = q.filter(
@@ -34,6 +66,7 @@ def list_patients(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "filter": filter,
         "scope": "all" if patient_ids is None else "assigned",
     }
 

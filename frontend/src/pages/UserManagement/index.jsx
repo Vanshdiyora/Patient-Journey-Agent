@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { ShieldCheck, UserCog } from "lucide-react";
-import { adminApi } from "../services/api";
-import { useAsync } from "../hooks/useAsync";
-import { getErrorMessage, humanize, toList } from "../utils/constants";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner } from "../components";
-import { ROLES } from "../utils/roles";
+import { adminApi } from "../../services";
+import { useAsync } from "../../hooks/useAsync";
+import { getErrorMessage, humanize, toList } from "../../utils";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner } from "../../components";
+import { ROLES } from "../../utils/roles";
 
 export default function UserManagement() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -35,7 +35,7 @@ export default function UserManagement() {
       setFeedback({ tone: "success", text: `${u.display_name || u.email} ${u.is_active ? "deactivated" : "reactivated"}.` });
       setRefreshKey(k => k + 1);
     } catch (err) {
-      setFeedback({ color: "error", text: getErrorMessage(err) });
+      setFeedback({ tone: "error", text: getErrorMessage(err) });
     } finally {
       setSaving("");
     }

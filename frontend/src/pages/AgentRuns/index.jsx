@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Bot, ChevronDown, ChevronRight, Clock3, Code2, Terminal } from "lucide-react";
-import { agentsApi } from "../services/api";
-import { useAsync } from "../hooks/useAsync";
-import { formatDate, formatDuration, humanize, toList } from "../utils/constants";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows } from "../components";
+import { agentsApi } from "../../services";
+import { useAsync } from "../../hooks/useAsync";
+import { formatDate, formatDuration, humanize, toList } from "../../utils";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows } from "../../components";
 
 export default function AgentRuns() {
   const [expanded, setExpanded] = useState(null);

@@ -24,15 +24,62 @@ Set:
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+## Modular architecture
+
+```
+frontend/src/
+├── main.jsx                 # ReactDOM bootstrap (BrowserRouter + App)
+├── App.jsx                  # Composition root: AuthProvider + AppRoutes
+├── routes/                  # Routing module
+│   ├── paths.js             #   Route path constants + buildPath()
+│   ├── guards.jsx           #   ProtectedRoute / StaffRoute / AdminRoute / HomeRoute
+│   └── index.jsx            #   Route tree (lazy-loaded pages)
+├── layouts/                 # App shell
+│   ├── AppLayout.jsx        #   Shell; picks portal theme class
+│   ├── portals.js           #   Per-role chrome config (nav, labels, themes)
+│   ├── Sidebar.jsx          #   Collapsible rail + identity card (role chip)
+│   └── Topbar.jsx           #   Breadcrumb + search + avatar
+├── pages/                   # One folder per feature
+│   └── <Feature>/
+│       ├── index.jsx        #   Page entry (routed)
+│       └── *.jsx|js         #   Private sub-components & config
+├── components/              # Shared UI primitives (Panel, TabBar, MetricCard…)
+├── context/AuthContext.jsx  # Session state (token + user, localStorage-backed)
+├── hooks/                   # useAsync, useTabs
+├── services/                # API layer: one module per backend resource
+│   ├── client.js            #   Single axios instance + interceptors
+│   ├── auth|patients|… .js  #   Resource clients
+│   └── index.js             #   Barrel — pages import from "../services"
+├── utils/                   # Pure helpers split by concern
+│   ├── dates.js text.js     #   Formatters
+│   ├── lists.js errors.js   #   Envelope normalizers, error extraction
+│   ├── roles.js             #   Role constants + capability flags
+│   └── index.js             #   Barrel
+└── styles/                  # Layered CSS (imported once via styles.css)
+    ├── index.css            #   Entrypoint — imports layers in cascade order
+    ├── tokens.css           #   Design tokens + element resets
+    ├── layout.css           #   Shell, sidebar, topbar
+    ├── ui.css               #   Shared primitives (buttons, panels, tables…)
+    ├── pages.css            #   Feature-page specifics
+    ├── portals.css          #   Portal accent variables
+    └── responsive.css       #   All media queries
+```
+
+Conventions:
+- Pages import shared code through barrels (`../services`, `../utils`, `../components`).
+- A page's private sub-components live next to it and are never imported by other pages.
+- UI role gates are presentation-only; the backend authorizes every API.
+
 ## Pages
 
-- Overview dashboard
-- Patients + patient profile
+- Overview dashboard (role-specific KPIs)
+- Patients + patient profile (role-specific tabs)
 - Patient journeys + journey detail
 - Journey steps / orchestration context / events / agent activity
 - Exceptions with resolve action
 - Agent run audit view
 - Action registry
+- Patient portal: My Journey with Overview / Care plan / Updates tabs
 - Login / protected routes
 
 ## Backend contract

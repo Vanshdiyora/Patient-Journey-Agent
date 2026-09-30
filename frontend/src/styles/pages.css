@@ -1,0 +1,163 @@
+/* Feature-page specific styles: dashboard, patient/journey detail, exceptions,
+   agent runs, action registry, login, event forms. */
+
+.back-link{display:inline-flex;align-items:center;gap:6px;color:#6c7b78;font-size:11px;margin-bottom:18px}
+.back-link:hover{color:var(--teal)}
+.heading-meta{display:flex;align-items:center;gap:9px;margin-top:8px}
+.heading-meta>span:last-child{font-size:10px;color:#84908e}
+
+/* Dashboard system pulse */
+.pulse-card{margin:16px;padding:14px;background:#f6fbfa;border:1px solid #dfeeea;border-radius:10px;display:flex;gap:11px;align-items:center}
+.pulse-dot{width:10px;height:10px;border-radius:50%;background:#39ad71;box-shadow:0 0 0 5px #dff5e9}
+.pulse-dot--loading{background:#c69a3b}
+.pulse-card strong{display:block;font-size:12px}
+.pulse-card span{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.pulse-list{padding:0 16px 14px}
+.pulse-row{display:flex;align-items:center;gap:9px;padding:11px 2px;border-bottom:1px solid #eef1f0;color:#667571}
+.pulse-row:last-child{border-bottom:0}
+.pulse-row span{font-size:11px;flex:1}
+.pulse-row b{font-size:10px;color:#4f635f}
+
+/* Patient detail */
+.patient-hero{display:flex;align-items:center;gap:16px;margin-bottom:24px}
+.patient-identity h1{font:800 25px "Manrope";margin:4px 0 8px}
+.patient-meta{display:flex;align-items:center;gap:14px;color:#71807c;font-size:11px}
+.patient-meta span{display:flex;align-items:center;gap:5px}
+.detail-list{padding:4px 18px}
+.detail-row{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #edf0f0}
+.detail-row:last-child{border-bottom:0}
+.detail-row span{font-size:10px;color:#84908e}
+.detail-row strong{font-size:10px;text-align:right;max-width:65%;word-break:break-all}
+
+/* Journey progress + timeline */
+.journey-progress{background:#fff;border:1px solid var(--line);box-shadow:var(--shadow);border-radius:12px;padding:15px 18px;margin-bottom:16px}
+.journey-progress-head{display:flex;justify-content:space-between;font-size:10px;color:#71807c;margin-bottom:9px}
+.journey-progress-head strong{color:#394c48}
+.progress-track{height:6px;background:#edf1f0;border-radius:10px;overflow:hidden}
+.progress-value{height:100%;background:#43aa91;border-radius:10px;transition:width .3s}
+.journey-list{padding:8px 14px}
+.journey-card{display:flex;align-items:center;gap:12px;padding:14px 6px;border-bottom:1px solid #edf0f0}
+.journey-card:last-child{border-bottom:0}
+.journey-card:hover{background:#fbfdfc}
+.journey-card-icon{width:36px;height:36px;border-radius:9px;background:#edf6f5;color:var(--teal);display:grid;place-items:center}
+.journey-card-main{flex:1}
+.journey-card-main strong{display:block;font-size:12px}
+.journey-card-main span{display:block;color:#8b9794;font-size:10px;margin-top:3px}
+.timeline{padding:12px 18px}
+.timeline-item{display:flex;gap:13px;position:relative;padding:11px 0 17px}
+.timeline-item:not(:last-child):after{content:"";position:absolute;left:14px;top:40px;bottom:-1px;width:1px;background:#dfe7e4}
+.timeline-marker{width:29px;height:29px;border-radius:50%;background:#f0f4f3;border:1px solid #dde6e3;color:#758581;display:grid;place-items:center;z-index:1;flex:none}
+.timeline-item.completed .timeline-marker,.timeline-item.resolved .timeline-marker{background:#e7f6ed;color:#25804f;border-color:#cfe9d9}
+.timeline-content{flex:1}
+.timeline-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.timeline-top strong{font-size:11px}
+.timeline-sub{font-size:9px;color:#8c9896;display:block;margin-top:3px}
+.block-note{margin-top:8px;padding:7px 9px;background:#fff6f6;color:#9c4147;border-radius:6px;font-size:9px;display:flex;align-items:center;gap:6px}
+.timeline-dates{display:flex;gap:12px;margin-top:7px;color:#87938f;font-size:9px}
+
+/* Events / compact lists */
+.json-view{margin:0;padding:16px;max-height:330px;overflow:auto;background:#f7f9f9;color:#566562;font:9px/1.6 ui-monospace,monospace}
+.compact-list,.event-list{padding:8px 16px}
+.compact-row,.event-row{display:flex;align-items:center;gap:9px;padding:10px 2px;border-bottom:1px solid #edf0f0}
+.compact-row:last-child,.event-row:last-child{border-bottom:0}
+.compact-icon{width:28px;height:28px;border-radius:7px;background:#f0f4ff;color:#4968c4;display:grid;place-items:center}
+.compact-row>div:nth-child(2),.event-row>div{flex:1}
+.compact-row strong,.event-row strong{display:block;font-size:10px}
+.compact-row span,.event-row span{display:block;color:#8a9693;font-size:9px;margin-top:2px}
+.event-dot{width:7px;height:7px;border-radius:50%;background:#d3a94b}
+.event-dot--done{background:#49ae76}
+
+/* Exceptions */
+.exception-list{padding:8px 14px}
+.exception-card{display:flex;gap:14px;border-bottom:1px solid #edf0f0;padding:16px 5px;position:relative}
+.exception-card:last-child{border-bottom:0}
+.severity-bar{width:3px;border-radius:5px;flex:none}
+.severity-bar--critical,.severity-bar--high{background:#c84b52}
+.severity-bar--medium{background:#c89a43}
+.severity-bar--low{background:#6c9c90}
+.exception-main{flex:1;min-width:0}
+.exception-top{display:flex;justify-content:space-between;gap:12px}
+.severity{margin-bottom:5px}
+.severity--critical,.severity--high{background:#fff0f1;color:#b83e46}
+.severity--medium{background:#fff6e2;color:#9a6a17}
+.severity--low{background:#edf7f5;color:#39776e}
+.exception-card h3{font:700 13px "Manrope";margin:0}
+.exception-card p{font-size:11px;line-height:1.55;color:#64736f;margin:7px 0}
+.exception-meta{display:flex;align-items:center;gap:13px;flex-wrap:wrap;font-size:9px;color:#8b9794}
+.exception-meta strong{color:#5b6966}
+
+/* Agent runs */
+.agent-legend{display:flex;gap:12px;font-size:9px;color:#82908d}
+.agent-legend span{display:flex;align-items:center;gap:5px}
+.legend-dot{width:6px;height:6px;border-radius:50%;background:#b4bfbc}
+.legend-dot--green{background:#48a974}
+.agent-run-list{padding:6px 12px}
+.agent-run{border-bottom:1px solid #edf0f0}
+.agent-run:last-child{border-bottom:0}
+.agent-run-head{border:0;background:transparent;width:100%;display:flex;align-items:center;gap:11px;text-align:left;padding:13px 6px;color:var(--text)}
+.agent-run-head:hover{background:#fbfdfc}
+.agent-run-icon{width:33px;height:33px;border-radius:9px;background:#eef2ff;color:#4d68c0;display:grid;place-items:center}
+.agent-run-title{flex:1}
+.agent-run-title strong{display:block;font-size:11px}
+.agent-run-title span{display:block;font-size:9px;color:#899592;margin-top:2px}
+.agent-run-time{display:flex;align-items:center;gap:5px;color:#84918e;font-size:9px}
+.agent-run-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 6px 15px 50px}
+.agent-run-detail>div:last-child{grid-column:1/-1}
+.agent-run-detail h4{display:flex;align-items:center;gap:6px;font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:#73817e;margin:4px 0 6px}
+.agent-run-detail pre{margin:0;max-height:220px;overflow:auto;background:#f7f9f9;border:1px solid #e8eceb;border-radius:7px;padding:10px;font:9px/1.5 ui-monospace,monospace;color:#566562}
+
+/* Action registry */
+.action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#edf0f0}
+.action-card{background:#fff;display:flex;gap:12px;padding:20px}
+.action-icon{width:36px;height:36px;border-radius:9px;background:#e8f5f2;color:#0d716a;display:grid;place-items:center;flex:none}
+.action-copy{flex:1}
+.action-card h3{font:700 12px "Manrope";margin:0 0 4px}
+.action-card p{font-size:10px;color:#71807c;line-height:1.5;margin:0}
+.action-meta{display:flex;gap:9px;align-items:center;margin-top:9px;flex-wrap:wrap}
+.action-meta span{font-size:9px;color:#38805e;display:flex;gap:4px;align-items:center}
+.action-meta code{font-size:8px}
+
+/* Event forms (journey detail add event, patient report form) */
+.event-form{border-top:1px solid #edf0f0;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.event-form-title{font-size:10px;font-weight:700;color:#62716e;display:flex;align-items:center;gap:6px}
+.event-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.event-form input,.event-form textarea,.event-form select{border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:8px 9px;outline:0;font-size:10px;color:#394b47}
+.event-form textarea{font:9px/1.5 ui-monospace,monospace;resize:vertical}
+.event-form input:focus,.event-form textarea:focus,.event-form select:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
+.event-form .primary-btn{align-self:flex-end;height:34px;font-size:10px}
+
+/* Login */
+.login-page{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr;background:#fff}
+.login-art{position:relative;overflow:hidden;background:#0d2926;color:#e9f5f2;padding:42px 7%;display:flex;flex-direction:column;justify-content:space-between}
+.login-art:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(113,197,185,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(113,197,185,.06) 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(to bottom,black,transparent 80%)}
+.login-glow{position:absolute;border-radius:50%;filter:blur(2px);opacity:.35}
+.login-glow--one{width:420px;height:420px;background:#1e8c81;right:-160px;top:-120px}
+.login-glow--two{width:350px;height:350px;background:#236b8c;left:-190px;bottom:-120px}
+.login-art-content,.login-art-footer{position:relative;z-index:1}
+.brand--light{padding:0;color:#fff}
+.hero-copy{max-width:590px;margin:auto 0}
+.hero-copy .eyebrow{color:#79d4ca;display:inline-flex;align-items:center;gap:6px}
+.hero-copy h1{font:800 clamp(38px,4.2vw,62px)/1.03 "Manrope";letter-spacing:-2.8px;margin:18px 0}
+.hero-copy h1 em{font-style:normal;color:#6fd1c7}
+.hero-copy p{font-size:15px;line-height:1.7;color:#9db6b2;max-width:500px}
+.login-features{display:flex;gap:18px;flex-wrap:wrap;margin-top:35px}
+.login-features div{display:flex;gap:7px;align-items:center;font-size:11px;color:#c0d4d0}
+.login-features svg{color:#65c9bd}
+.login-art-footer{font-size:10px;color:#77908b}
+.login-panel{display:flex;align-items:center;justify-content:center;padding:40px;background:#f8faf9}
+.login-card{width:min(420px,100%)}
+.mobile-brand{display:none}
+.login-heading{margin-bottom:28px}
+.login-heading h2{font:800 27px "Manrope";letter-spacing:-.8px;margin:7px 0}
+.login-heading p{font-size:12px;line-height:1.6;color:var(--muted);margin:0}
+.form-stack{display:flex;flex-direction:column;gap:17px}
+.form-stack label{font-size:11px;color:#52615e;font-weight:600}
+.input-wrap{height:45px;border:1px solid #dce4e1;background:#fff;border-radius:9px;margin-top:7px;display:flex;align-items:center;gap:9px;padding:0 12px;color:#9aa6a3;transition:.15s}
+.input-wrap:focus-within{border-color:#77bdb5;box-shadow:0 0 0 3px #e6f4f2}
+.input-wrap input{border:0;outline:0;flex:1;min-width:0;font-size:12px;color:#263835;background:transparent}
+.input-wrap input::placeholder{color:#b0bbb8}
+.input-action{border:0;background:transparent;color:#879491;padding:2px;display:grid;place-items:center}
+.form-error{display:flex;align-items:flex-start;gap:8px;background:#fff3f3;border:1px solid #efd5d7;color:#a23e45;border-radius:8px;padding:10px;font-size:10px;line-height:1.45}
+.error-icon{width:16px;height:16px;border-radius:50%;background:#c74b53;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none}
+.secure-note{margin-top:20px;display:flex;align-items:center;justify-content:center;gap:6px;color:#899592;font-size:9px}
+.secure-note svg{color:#52a078}

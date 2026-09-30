@@ -1,22 +1,11 @@
 import React, { useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { exceptionsApi } from "../services/api";
-import { useAsync } from "../hooks/useAsync";
-import { formatDate, getErrorMessage, humanize, severityClass, toList } from "../utils/constants";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, FilterSelect, ResultCount, SkeletonRows } from "../components";
-
-const STATUS_OPTIONS = [
-  { value: "open", label: "Open" },
-  { value: "resolved", label: "Resolved" },
-  { value: "pending", label: "Pending" },
-];
-const SEVERITY_OPTIONS = [
-  { value: "critical", label: "Critical" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
-];
+import { exceptionsApi } from "../../services";
+import { useAsync } from "../../hooks/useAsync";
+import { formatDate, getErrorMessage, humanize, severityClass, toList } from "../../utils";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, FilterSelect, ResultCount, SkeletonRows } from "../../components";
+import { STATUS_OPTIONS, SEVERITY_OPTIONS } from "./filters";
 
 export default function Exceptions() {
   const [status, setStatus] = useState("");

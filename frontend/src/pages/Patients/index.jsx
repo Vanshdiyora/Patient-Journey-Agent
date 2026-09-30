@@ -1,24 +1,44 @@
 import React, { useState } from "react";
 import { Users } from "lucide-react";
 import { Link } from "react-router-dom";
-import { patientsApi } from "../services/api";
-import { useAsync } from "../hooks/useAsync";
-import { formatDate, initials } from "../utils/constants";
-import { PageHeading, Panel, EmptyState, ErrorState, Pagination, SearchBox, SkeletonRows } from "../components";
+import { patientsApi } from "../../services";
+import { useAsync } from "../../hooks/useAsync";
+import { useTabs } from "../../hooks/useTabs";
+import { formatDate, initials } from "../../utils";
+import { isAdmin, isCoordinator, portalName } from "../../utils/roles";
+import { useAuth } from "../../context/AuthContext";
+import { PageHeading, Panel, EmptyState, ErrorState, Pagination, SearchBox, SkeletonRows, TabBar } from "../../components";
+import { TABS_BY_ROLE } from "./tabs";
 
 export default function Patients() {
+  const { user } = useAuth();
+  const tabs = TABS_BY_ROLE[String(user?.role || "").toUpperCase()] || TABS_BY_ROLE.ADMIN;
+  const { active: tab, select: setTab } = useTabs("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const limit = 20;
-  const { data, loading, error } = useAsync(() => patientsApi.list({ search: search || undefined, limit, offset }), [search, offset]);
+  const { data, loading, error } = useAsync(
+    () => patientsApi.list({ search: search || undefined, filter: tab || undefined, limit, offset }),
+    [search, offset, tab]
+  );
   const patients = Array.isArray(data) ? data : data?.items || data?.patients || [];
+  const activeTab = tabs.find(t => t.id === tab) || tabs[0];
 
   return <div>
-    <PageHeading eyebrow="Patient directory" title="Patients" description="Find a patient and follow their care journey." />
+    <PageHeading
+      eyebrow={portalName(user)}
+      title={isCoordinator(user) ? "Patient follow-ups" : "Patients"}
+      description={isAdmin(user)
+        ? "Full platform directory with operational slices."
+        : isCoordinator(user)
+          ? "Patients needing coordination follow-up."
+          : "Find a patient and follow their care journey."}
+    />
     <Panel>
-      <div className="toolbar">
+      <TabBar tabs={tabs} active={tab} onChange={(id) => { setTab(id); setOffset(0); }} className="tab-bar--inset" />
+      <div className="toolbar" style={{ borderTop: "1px solid var(--line)" }}>
         <SearchBox value={search} onChange={v => { setSearch(v); setOffset(0); }} placeholder="Search by name or patient reference…" />
-        <button className="secondary-btn">Filters</button>
+        <span className="result-count">{activeTab?.label}</span>
       </div>
       {error ? <ErrorState error={error} title="Could not load patients" /> :
         loading ? <SkeletonRows /> :
@@ -38,7 +58,7 @@ export default function Patients() {
                 </tr>
               ))}</tbody>
             </table></div>
-          ) : <EmptyState icon={Users} title="No patients found" text="Try another patient name or reference." />}
+          ) : <EmptyState icon={Users} title="No patients here" text={`No patients match "${activeTab?.label}". Try another tab or clear the search.`} />}
       <Pagination offset={offset} limit={limit} count={patients.length} onPage={setOffset} />
     </Panel>
   </div>;

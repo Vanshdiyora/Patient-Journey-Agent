@@ -1,0 +1,8 @@
+/* ============ Role portals ============
+   Each portal gets a distinct accent: admin=purple, clinician=blue,
+   coordinator=amber, patient=soft teal on a light shell. */
+.app-shell{--portal:#0b716b;--portal-soft:#e6f4f2;--portal-deep:#102624}
+.app-shell.theme-admin{--portal:#5b4fc4;--portal-soft:#efedfb;--portal-deep:#221d47}
+.app-shell.theme-clinician{--portal:#2264c2;--portal-soft:#e9f1fc;--portal-deep:#12263f}
+.app-shell.theme-coordinator{--portal:#9a6a17;--portal-soft:#fbf3e0;--portal-deep:#33270e}
+.app-shell.theme-patient{--portal:#0d8f83;--portal-soft:#e4f5f2;--portal-deep:#0f2e2a}
