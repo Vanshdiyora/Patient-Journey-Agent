@@ -1,0 +1,3 @@
+from typing import Protocol, Any
+class ClinicalEventService(Protocol):
+    def create_event(self, payload: dict[str, Any]) -> dict[str, Any]: ...

@@ -1,0 +1,3 @@
+from typing import Protocol, Any
+class DocumentService(Protocol):
+    def request_document(self, payload: dict[str, Any]) -> dict[str, Any]: ...

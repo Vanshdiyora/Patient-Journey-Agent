@@ -1,0 +1,69 @@
+from functools import lru_cache
+import json
+from pathlib import Path
+from typing import Annotated
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+class Settings(BaseSettings):
+    app_name: str = "Patient Journey Orchestrator API"
+    app_env: str = "development"
+    debug: bool = False
+    api_prefix: str = "/api/v1"
+    database_url: str
+
+    auth_required: bool = False
+    auth_jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
+    auth_jwt_expires_minutes: int = 480
+    azure_tenant_id: str = ""
+    azure_client_id: str = ""
+    azure_audience: str = ""
+    azure_issuer: str = ""
+    dev_user_entra_object_id: str = "local-development-user"
+    dev_user_email: str = "developer@carepath-health.example"
+    dev_user_name: str = "Local Development User"
+    dev_user_role: str = "CARE_COORDINATOR"
+
+    cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
+
+    maq_ai_base_url: str = "https://llm.maqsoftware.net/v1"
+    maq_ai_api_key: str = ""
+    maq_ai_model: str = "qwen-3.8-27b"
+    maq_ai_timeout_seconds: int = 90
+    maq_ai_temperature: float = 0.0
+    maq_ai_enabled: bool = True
+
+    supervisor_max_iterations: int = 6
+    agent_context_event_limit: int = 12
+
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_DIR / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            if value.startswith("["):
+                value = json.loads(value)
+            else:
+                value = value.split(",")
+        if not isinstance(value, list) or not all(
+            isinstance(origin, str) and origin.strip() for origin in value
+        ):
+            raise ValueError("CORS_ORIGINS must be a comma-separated string or a JSON array of URLs")
+        return [origin.strip() for origin in value]
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+settings = get_settings()
