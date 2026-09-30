@@ -20,7 +20,6 @@ def me(user=Depends(get_current_user)):
     # Same shape as the login response so the frontend can treat them identically.
     return {
         "email": user.email,
-        "entra_object_id": user.entra_object_id,
         "name": user.display_name,
         "role": user.role,
     }

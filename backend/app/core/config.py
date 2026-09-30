@@ -1,8 +1,9 @@
 from functools import lru_cache
 import json
+import secrets
 from pathlib import Path
 from typing import Annotated
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -14,17 +15,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     database_url: str
 
-    auth_required: bool = False
-    auth_jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
+    auth_jwt_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(48))
     auth_jwt_expires_minutes: int = 480
-    azure_tenant_id: str = ""
-    azure_client_id: str = ""
-    azure_audience: str = ""
-    azure_issuer: str = ""
-    dev_user_entra_object_id: str = "local-development-user"
-    dev_user_email: str = "developer@carepath-health.example"
-    dev_user_name: str = "Local Development User"
-    dev_user_role: str = "CARE_COORDINATOR"
 
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:3000",

@@ -3,7 +3,7 @@ Patient-safe event schema: only fields a patient may legitimately supply.
 The server sets source/actor/verified; anything that could influence journey
 state (verified, step_completed, status) is deliberately absent.
 """
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,5 +48,5 @@ class PatientProfileResponse(BaseModel):
     first_name: str
     last_name: str
     email: str | None = None
-    date_of_birth: datetime | None = None
+    date_of_birth: date | None = None
     gender: str | None = None

@@ -46,3 +46,18 @@ export function canViewObservability(user) {
 export function canManageUsers(user) {
   return isAdmin(user);
 }
+
+export function isCoordinator(user) {
+  return roleOf(user) === ROLES.CARE_COORDINATOR;
+}
+
+/** Portal display name for headings and chrome. */
+export function portalName(user) {
+  const map = {
+    [ROLES.ADMIN]: "Admin console",
+    [ROLES.CLINICIAN]: "Clinician portal",
+    [ROLES.CARE_COORDINATOR]: "Coordination portal",
+    [ROLES.PATIENT]: "My health",
+  };
+  return map[roleOf(user)] || "Workspace";
+}

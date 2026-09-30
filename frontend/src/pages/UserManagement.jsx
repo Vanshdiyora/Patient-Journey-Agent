@@ -53,14 +53,13 @@ export default function UserManagement() {
         loading ? <SkeletonRows /> :
           users.length ? (
             <div className="table-wrap"><table>
-              <thead><tr><th>User</th><th>Entra object ID</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>{users.map(u => (
                 <tr key={u.id}>
                   <td><div className="person-cell">
                     <div className="person-avatar">{(u.display_name || u.email)[0].toUpperCase()}</div>
                     <div><span className="table-primary">{u.display_name || u.email}</span><span>{u.email}</span></div>
                   </div></td>
-                  <td><code>{u.entra_object_id}</code></td>
                   <td>
                     <select
                       value={u.role}

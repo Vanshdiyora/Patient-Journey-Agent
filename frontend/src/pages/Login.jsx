@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Brand from "../components/Brand";
 import { getErrorMessage } from "../utils/constants";
@@ -7,21 +7,20 @@ import { getErrorMessage } from "../utils/constants";
 export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
-  const [entraObjectId, setEntraObjectId] = useState("");
-  const [showId, setShowId] = useState(false);
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!email.trim() || !entraObjectId.trim()) {
-      setError("Enter both your email and identity ID.");
+    if (!email.trim() || !password) {
+      setError("Enter your email and password.");
       return;
     }
     setLoading(true);
     try {
-      await login({ email: email.trim(), entra_object_id: entraObjectId.trim() });
+      await login({ email: email.trim(), password });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -55,15 +54,14 @@ export default function Login() {
           <div className="login-heading">
             <span className="eyebrow eyebrow--teal">Welcome back</span>
             <h2>Sign in to your workspace</h2>
-            <p>Patients and care teams can sign in with their registered account.</p>
+            <p>Sign in with the email address and password for your account.</p>
           </div>
           <form onSubmit={submit} className="form-stack">
             <label>Email address
               <div className="input-wrap"><Mail size={18} /><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.test" autoComplete="email" /></div>
             </label>
-            <label>Identity ID
-              <div className="input-wrap"><LockKeyhole size={18} /><input type={showId ? "text" : "password"} value={entraObjectId} onChange={e => setEntraObjectId(e.target.value)} placeholder="Your Entra or demo identity ID" autoComplete="off" />
-                <button type="button" className="input-action" onClick={() => setShowId(!showId)}>{showId ? <EyeOff size={17} /> : <Eye size={17} />}</button>
+            <label>Password
+              <div className="input-wrap"><LockKeyhole size={18} /><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" autoComplete="current-password" />
               </div>
             </label>
             {error && <div className="form-error"><span className="error-icon">!</span>{error}</div>}

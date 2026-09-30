@@ -41,18 +41,19 @@ The UI follows the uploaded OpenAPI contract and calls `/api/v1/*`.
 
 ## Authentication
 
-The UI sends email + Entra object ID to:
+The UI sends email + password to:
 
 `POST /api/v1/auth/login`
 
-The returned bearer token is automatically attached to protected API calls by the Axios interceptor.
+The backend verifies the stored password hash and returns a bearer token. The
+Axios interceptor attaches that token to protected API calls.
 
 ## Notes
 
 The dashboard is deliberately tolerant of a few common response envelope shapes (`items`, `patients`, `journeys`, etc.) because the uploaded OpenAPI describes some response bodies as untyped JSON.
 
 Before production deployment:
-- Replace temporary identity login with real Entra/OIDC.
+- Replace the shared demo passwords with individual reset credentials.
 - Set a strong backend JWT secret.
 - Configure CORS for the deployed frontend origin.
 - Set `VITE_API_BASE_URL` to the deployed API.

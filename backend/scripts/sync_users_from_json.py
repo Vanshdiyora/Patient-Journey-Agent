@@ -2,8 +2,9 @@
 Sync the users table from the canonical seed JSON
 (files/Database creation/patient_journey_users.json).
 
-- Matches rows by entra_object_id (deterministic across seed formats).
-- Updates email, display_name, role, is_active for existing rows.
+- Matches rows by stable database ID, with normalized email as a fallback.
+- Sets the shared local-demo password when creating/resetting seed accounts.
+- Updates display_name, role, is_active, and optional patient association.
 - Inserts rows that are missing.
 - Never deletes: users absent from the JSON are left untouched.
 
@@ -14,10 +15,12 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import SessionLocal
+from app.core.passwords import hash_password
 from app.models.user import User
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -36,34 +39,49 @@ def main() -> None:
 
     db = SessionLocal()
     now = datetime.now(timezone.utc)
+    demo_password = "Test@123"
+    demo_password_hash = hash_password(demo_password)
     updated = inserted = unchanged = 0
 
     try:
         for entry in users:
-            user = db.query(User).filter(User.entra_object_id == entry["entra_object_id"]).first()
+            email = entry["email"].strip().lower()
+            user_id = UUID(entry["id"])
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is None:
+                user = db.query(User).filter(User.email == email).first()
+            has_patient_link = "patient_id" in entry
+            patient_id = UUID(entry["patient_id"]) if entry.get("patient_id") else None
             if user:
                 changed = (
-                    user.email != entry["email"]
+                    user.email != email
                     or user.display_name != entry["display_name"]
                     or user.role != entry["role"]
                     or user.is_active != entry["is_active"]
+                    or (has_patient_link and user.patient_id != patient_id)
+                    or not user.password_hash
                 )
                 if changed:
-                    user.email = entry["email"]
+                    user.email = email
                     user.display_name = entry["display_name"]
                     user.role = entry["role"]
                     user.is_active = entry["is_active"]
+                    if has_patient_link:
+                        user.patient_id = patient_id
+                    if not user.password_hash:
+                        user.password_hash = demo_password_hash
                     user.updated_at = now
                     updated += 1
                 else:
                     unchanged += 1
             else:
                 db.add(User(
-                    id=entry["id"],
-                    entra_object_id=entry["entra_object_id"],
-                    email=entry["email"],
+                    id=user_id,
+                    email=email,
+                    password_hash=hash_password(demo_password),
                     display_name=entry["display_name"],
                     role=entry["role"],
+                    patient_id=patient_id,
                     is_active=entry["is_active"],
                     created_at=entry.get("created_at", now),
                     updated_at=entry.get("updated_at", now),

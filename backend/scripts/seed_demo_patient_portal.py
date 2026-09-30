@@ -5,9 +5,8 @@ missing. Run the patient email migration first:
 
     python scripts/seed_demo_patient_portal.py
 
-This is local demo data. Identity IDs are placeholders for the development
-email + identity-ID login bridge; replace them with real Entra object IDs when
-the Entra integration is enabled.
+This is local demo data. All generated accounts use the shared demo password
+and store only a bcrypt hash in PostgreSQL.
 """
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -17,6 +16,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.database import SessionLocal
+from app.core.passwords import hash_password, verify_password
 from app.models import ExceptionRecord, Journey, JourneyStep, Patient, PatientEvent, Pathway, PathwayStep, User
 
 
@@ -96,28 +96,25 @@ def stable_id(kind: str, number: int, suffix: str = "") -> UUID:
 
 
 def ensure_user(db, patient: Patient, profile: dict) -> None:
-    oid = f"demo-patient-2026-{profile['number']:04d}"
     user = db.query(User).filter(User.patient_id == patient.id).first()
     by_email = db.query(User).filter(User.email == profile["email"]).first()
-    by_oid = db.query(User).filter(User.entra_object_id == oid).first()
     if by_email and by_email.patient_id not in (None, patient.id):
         raise ValueError(f"Email {profile['email']} is already linked to another patient")
-    if by_oid and by_oid.patient_id not in (None, patient.id):
-        raise ValueError(f"Demo identity {oid} is already linked to another patient")
-    user = user or by_email or by_oid
+    user = user or by_email
     if user:
         user.email = profile["email"]
-        user.entra_object_id = oid
         user.display_name = f"{profile['first_name']} {profile['last_name']} (Patient)"
         user.role = "PATIENT"
         user.patient_id = patient.id
         user.is_active = True
+        if not verify_password("Test@123", user.password_hash):
+            user.password_hash = hash_password("Test@123")
         user.updated_at = NOW
     else:
         db.add(User(
             id=stable_id("user", profile["number"]),
-            entra_object_id=oid,
             email=profile["email"],
+            password_hash=hash_password("Test@123"),
             display_name=f"{profile['first_name']} {profile['last_name']} (Patient)",
             role="PATIENT",
             patient_id=patient.id,
@@ -280,7 +277,7 @@ def main() -> None:
         for patient_profile in PATIENTS:
             print(
                 f"{patient_profile['reference']} | {patient_profile['email']} | "
-                f"demo-patient-2026-{patient_profile['number']:04d} | {patient_profile['pathway']}"
+                f"password=Test@123 | {patient_profile['pathway']}"
             )
     except Exception:
         db.rollback()

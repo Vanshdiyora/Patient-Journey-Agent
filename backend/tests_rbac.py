@@ -15,6 +15,7 @@ import uvicorn
 from app.core.database import Base, SessionLocal, engine
 from app.models import Patient, Journey
 from app.models.user import User
+from app.core.passwords import hash_password
 
 BASE = "http://127.0.0.1:8777"
 
@@ -61,7 +62,7 @@ def main():
 
     # Users: admin, clinician, coordinator, patient (linked), unlinked patient
     def mkuser(email, role, patient_id=None, active=True):
-        u = User(entra_object_id=f"entra-rbac-{email}", email=email, display_name=email.split("@")[0],
+        u = User(email=email, password_hash=hash_password("Test@123"), display_name=email.split("@")[0],
                  role=role, patient_id=patient_id, is_active=active, created_at=now, updated_at=now)
         db.add(u)
         return u
@@ -90,23 +91,23 @@ def main():
         print(("PASS  " if cond else "FAIL  ") + label + ("" if cond else f"  -> {detail}"))
         ok = ok and cond
 
-    def login(email, oid):
-        s, b = req("POST", "/api/v1/auth/login", {"email": email, "entra_object_id": oid})
+    def login(email):
+        s, b = req("POST", "/api/v1/auth/login", {"email": email, "password": "Test@123"})
         return b.get("access_token") if s == 200 else None
 
-    ADMIN = login("rbac.admin@carepath-health.example", "entra-rbac-rbac.admin@carepath-health.example")
-    CLIN = login("rbac.clinician@carepath-health.example", "entra-rbac-rbac.clinician@carepath-health.example")
-    COORD = login("rbac.coordinator@carepath-health.example", "entra-rbac-rbac.coordinator@carepath-health.example")
-    PAT = login("rbac.patient@carepath-health.example", "entra-rbac-rbac.patient@carepath-health.example")
-    PAT2 = login("rbac.patient2@carepath-health.example", "entra-rbac-rbac.patient2@carepath-health.example")
+    ADMIN = login("rbac.admin@carepath-health.example")
+    CLIN = login("rbac.clinician@carepath-health.example")
+    COORD = login("rbac.coordinator@carepath-health.example")
+    PAT = login("rbac.patient@carepath-health.example")
+    PAT2 = login("rbac.patient2@carepath-health.example")
     UNLINKED = None
-    s, b = req("POST", "/api/v1/auth/login", {"email": "rbac.unlinked@carepath-health.example", "entra_object_id": "entra-rbac-rbac.unlinked@carepath-health.example"})
+    s, b = req("POST", "/api/v1/auth/login", {"email": "rbac.unlinked@carepath-health.example", "password": "Test@123"})
     # unlinked patient user is a valid identity; role checks will gate them
 
     check("staff logins issued", all([ADMIN, CLIN, COORD, PAT, PAT2]))
 
     # ---- Login boundaries ---------------------------------------------------
-    s, b = req("POST", "/api/v1/auth/login", {"email": "rbac.unlinked@carepath-health.example", "entra_object_id": "entra-rbac-rbac.unlinked@carepath-health.example"})
+    s, b = req("POST", "/api/v1/auth/login", {"email": "rbac.unlinked@carepath-health.example", "password": "Test@123"})
     check("unlinked patient can still login", s == 200, f"{s} {b}")
 
     # ---- Staff surfaces denied to patients ----------------------------------

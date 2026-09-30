@@ -31,7 +31,6 @@ def _serialize(u: User) -> dict:
     return {
         "id": str(u.id),
         "email": u.email,
-        "entra_object_id": u.entra_object_id,
         "display_name": u.display_name,
         "role": u.role,
         "patient_id": str(u.patient_id) if u.patient_id else None,

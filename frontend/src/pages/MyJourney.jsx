@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Activity, CalendarClock, CheckCircle2, HeartPulse, Send } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock3, FileText, HeartPulse, Send } from "lucide-react";
 import { meApi } from "../services/api";
 import { useAsync } from "../hooks/useAsync";
 import { formatDate, getErrorMessage, humanize, toList } from "../utils/constants";
@@ -73,6 +73,8 @@ export default function MyJourney() {
     return <EmptyState icon={HeartPulse} title="No active journey" text="Your care team has not started a journey for you yet." />;
   }
 
+  const nextStep = stepRows.find(s => !["COMPLETED", "RESOLVED", "CANCELLED"].includes(String(s.status).toLowerCase()));
+
   return <div>
     <div className="page-heading">
       <div>
@@ -81,6 +83,25 @@ export default function MyJourney() {
         <p>Follow your care plan and send updates to your care team.</p>
       </div>
     </div>
+
+    <section className="metric-grid">
+      <div className="metric-card">
+        <div className="metric-icon metric-icon--teal"><HeartPulse size={20} /></div>
+        <div className="metric-copy"><span>Care plan progress</span><strong>{stepRows.length ? Math.round(done / stepRows.length * 100) : 0}%</strong><small>{done} of {stepRows.length} steps done</small></div>
+      </div>
+      <div className="metric-card">
+        <div className="metric-icon metric-icon--blue"><Clock3 size={20} /></div>
+        <div className="metric-copy"><span>Next step</span><strong>{nextStep ? `Step ${stepRows.indexOf(nextStep) + 1}` : "All done"}</strong><small>{nextStep?.due_at ? `Due ${formatDate(nextStep.due_at)}` : "No pending steps"}</small></div>
+      </div>
+      <div className="metric-card">
+        <div className="metric-icon metric-icon--amber"><FileText size={20} /></div>
+        <div className="metric-copy"><span>Updates sent</span><strong>{eventRows.length}</strong><small>{eventRows.filter(e => !e.processed).length} awaiting review</small></div>
+      </div>
+      <div className="metric-card">
+        <div className="metric-icon metric-icon--green"><CheckCircle2 size={20} /></div>
+        <div className="metric-copy"><span>Reviewed by team</span><strong>{eventRows.filter(e => e.processed).length}</strong><small>Updates processed</small></div>
+      </div>
+    </section>
 
     {rows.length > 1 && (
       <div className="button-group" style={{ marginBottom: 16 }}>

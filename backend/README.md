@@ -15,13 +15,47 @@ This backend implements the architecture from the project approach document:
 - PostgreSQL as the source of truth
 - MAQ AI through the OpenAI-compatible API at `https://llm.maqsoftware.net/v1`
 
-Authentication is intentionally optional in local development because Entra resources are not yet available. Set `AUTH_REQUIRED=true` later when Entra configuration is ready.
+All protected API routes require an email/password login and a signed bearer token. User passwords are stored as bcrypt hashes.
 
 ## Existing database
 
 This code expects the PostgreSQL schema/seed already created for Patient Journey Orchestrator. It does **not** run `Base.metadata.create_all()` against the existing database.
 
 The SQL seed previously supplied for this project creates the synthetic data.
+
+For an empty local PostgreSQL database, run these from the repository root:
+
+```powershell
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/Create Tables.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/patient_journey_orchestrator_seed.sql"
+```
+
+The seed creates 1,200 staff accounts and 1,200 patient accounts. Each patient
+has a unique email and a linked `PATIENT` user row. All seed passwords start as
+`Test@123`; PostgreSQL `pgcrypto` stores bcrypt hashes rather than raw
+passwords. It also generates synthetic clinical-like data.
+
+## Patient portal demo accounts
+
+Patient records support an optional email for compatibility with older imported
+rows. A portal account is stored in `users` with `role = PATIENT` and its
+`patient_id` linked to exactly one patient. Patient-scoped endpoints use that
+link to return only the authenticated patient's own journey.
+
+For a legacy existing database, apply the migration, then add the four extra
+patient portal demo records by running:
+
+```powershell
+psql -h localhost -U postgres -d patient_journey_orchestrator -f migrations/20260930_add_patient_email.sql
+python scripts/seed_demo_patient_portal.py
+```
+
+If your shell has a non-boolean `DEBUG` environment variable, run
+`$env:DEBUG = "false"` first so the settings loader can start.
+
+This creates four additional synthetic patients with one journey each and
+matching portal accounts. Their initial password is `Test@123`, stored as a
+bcrypt hash.
 
 ## Run
 
@@ -44,7 +78,9 @@ Open `/docs`.
 
 ## Local authentication
 
-With `AUTH_REQUIRED=false`, the API uses the configured development user. If that user does not exist in `users`, the application creates it on startup only in development mode.
+Sign in at `/login` with a seeded user's email and `Test@123`. The backend
+verifies the bcrypt hash and returns a JWT. Protected routes reject requests
+without a valid bearer token; there is no implicit development-user bypass.
 
 ## MAQ AI
 
