@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { LogOut, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useConfirm } from "../components/ConfirmModal";
 import Brand from "../components/Brand";
 import { portalFor } from "./portals";
 import { isAdmin, roleOf } from "../utils/roles";
@@ -17,6 +18,20 @@ import { isAdmin, roleOf } from "../utils/roles";
 export default function Sidebar({ mobileOpen, setMobileOpen }) {
   const [collapsed, setCollapsed] = useState(false);
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [confirm, confirmModal] = useConfirm();
+
+  const handleSignOut = async () => {
+    const ok = await confirm({
+      title: "Sign out?",
+      message: "You will be returned to the sign-in page. Any unsaved input in forms will be lost.",
+      confirmLabel: "Sign out",
+      intent: "danger",
+    });
+    if (!ok) return;
+    logout();
+    navigate("/login");
+  };
 
   const portal = portalFor(user);
   const expanded = !collapsed || mobileOpen;
@@ -86,7 +101,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
               </div>
             )
           )}
-          <button className="nav-item" onClick={logout}>
+          <button className="nav-item" onClick={handleSignOut}>
             <LogOut size={19} />
             {expanded && <span>Sign out</span>}
           </button>
@@ -94,6 +109,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
       </aside>
 
       {mobileOpen && <div className="mobile-overlay" onClick={closeMobile} />}
+      {confirmModal}
     </>
   );
 }

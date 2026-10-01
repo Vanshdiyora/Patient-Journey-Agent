@@ -122,9 +122,13 @@
 .event-form-title{font-size:10px;font-weight:700;color:#62716e;display:flex;align-items:center;gap:6px}
 .event-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .event-form input,.event-form textarea,.event-form select{border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:8px 9px;outline:0;font-size:10px;color:#394b47}
+.event-form .select-root{width:100%}
+.event-form .select-trigger{width:100%;height:36px;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:0 10px;font-size:10px;color:#394b47}
+.event-form .select-trigger:focus-visible{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .event-form textarea{font:9px/1.5 ui-monospace,monospace;resize:vertical}
 .event-form input:focus,.event-form textarea:focus,.event-form select:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .event-form .primary-btn{align-self:flex-end;height:34px;font-size:10px}
+.event-form-error{display:flex;align-items:center;gap:6px;background:#fff6f6;color:#9c4147;border:1px solid #f0d3d5;border-radius:7px;padding:7px 9px;font-size:10px}
 
 /* Login */
 .login-page{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr;background:#fff}
@@ -152,6 +156,10 @@
 .login-heading p{font-size:12px;line-height:1.6;color:var(--muted);margin:0}
 .form-stack{display:flex;flex-direction:column;gap:17px}
 .form-stack label{font-size:11px;color:#52615e;font-weight:600}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.login-switch{margin:18px 0 0;text-align:center;font-size:11px;color:#687774}
+.login-switch .text-link{font-size:11px}
+.signup-role-select{border:0;outline:0;flex:1;min-width:0;font-size:12px;color:#263835;background:transparent;appearance:none;-webkit-appearance:none;cursor:pointer}
 .input-wrap{height:45px;border:1px solid #dce4e1;background:#fff;border-radius:9px;margin-top:7px;display:flex;align-items:center;gap:9px;padding:0 12px;color:#9aa6a3;transition:.15s}
 .input-wrap:focus-within{border-color:#77bdb5;box-shadow:0 0 0 3px #e6f4f2}
 .input-wrap input{border:0;outline:0;flex:1;min-width:0;font-size:12px;color:#263835;background:transparent}

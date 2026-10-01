@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import ChatWidget from "../components/chat/ChatWidget";
 import { useAuth } from "../context/AuthContext";
 import { portalFor } from "./portals";
 
@@ -23,6 +24,7 @@ export default function AppLayout() {
         <Topbar onOpenMenu={() => setMobileOpen(true)} />
         <div className="page-container"><Outlet /></div>
       </main>
+      <ChatWidget />
     </div>
   );
 }

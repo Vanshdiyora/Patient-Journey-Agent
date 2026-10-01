@@ -5,6 +5,8 @@ import { exceptionsApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { formatDate, getErrorMessage, humanize, severityClass, toList } from "../../utils";
 import { PageHeading, Panel, EmptyState, ErrorState, Badge, FilterSelect, ResultCount, SkeletonRows } from "../../components";
+import { useConfirm } from "../../components/ConfirmModal";
+import { useToast } from "../../context/ToastContext";
 import { STATUS_OPTIONS, SEVERITY_OPTIONS } from "./filters";
 
 export default function Exceptions() {
@@ -12,6 +14,8 @@ export default function Exceptions() {
   const [severity, setSeverity] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [saving, setSaving] = useState("");
+  const [confirm, confirmModal] = useConfirm();
+  const toast = useToast();
   const { data, loading, error } = useAsync(
     () => exceptionsApi.list({ status: status || undefined, severity: severity || undefined, limit: 100 }),
     [status, severity, refreshKey]
@@ -19,12 +23,20 @@ export default function Exceptions() {
   const rows = toList(data, "items", "exceptions");
 
   const resolve = async (e) => {
+    const ok = await confirm({
+      title: "Resolve this exception?",
+      message: e.title || "The exception will be marked resolved for the care team.",
+      confirmLabel: "Resolve",
+      intent: "primary",
+    });
+    if (!ok) return;
     setSaving(e.id);
     try {
       await exceptionsApi.update(e.id, { status: "resolved", recommended_action: e.recommended_action });
+      toast.success("Exception resolved.");
       setRefreshKey(x => x + 1);
     } catch (err) {
-      alert(getErrorMessage(err));
+      toast.error(getErrorMessage(err));
     } finally {
       setSaving("");
     }
@@ -70,5 +82,6 @@ export default function Exceptions() {
             ))}</div>
           ) : <EmptyState icon={CheckCircle2} title="No exceptions" text="No exceptions match the selected filters." />}
     </Panel>
+    {confirmModal}
   </div>;
 }

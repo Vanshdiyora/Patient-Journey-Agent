@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 import AppLayout from "../layouts/AppLayout";
 import Login from "../pages/Login";
+import Signup from "../pages/Signup";
 import { PATHS } from "./paths";
 import { ProtectedRoute, LoginRoute, StaffRoute, AdminRoute, HomeRoute } from "./guards";
 
@@ -32,6 +33,7 @@ export default function AppRoutes() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path={PATHS.login} element={<LoginRoute><Login /></LoginRoute>} />
+        <Route path={PATHS.signup} element={<LoginRoute><Signup /></LoginRoute>} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route element={<HomeRoute />}>

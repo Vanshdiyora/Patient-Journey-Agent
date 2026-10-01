@@ -1,4 +1,5 @@
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
 import AppRoutes from "./routes";
 
 /**
@@ -7,8 +8,10 @@ import AppRoutes from "./routes";
  */
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </ToastProvider>
   );
 }

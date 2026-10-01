@@ -8,10 +8,12 @@
 .eyebrow--teal{color:var(--teal)}
 .button-group{display:flex;gap:9px}
 
-.primary-btn,.secondary-btn{height:38px;padding:0 14px;border-radius:9px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:600;transition:.15s}
+.primary-btn,.secondary-btn,.danger-btn{height:38px;padding:0 14px;border-radius:9px;border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:600;transition:.15s}
 .primary-btn{background:var(--teal);color:#fff;box-shadow:0 4px 12px rgba(11,113,107,.18)}
 .primary-btn:hover{background:#075f59}
-.primary-btn:disabled,.secondary-btn:disabled{opacity:.6;cursor:not-allowed}
+.danger-btn{background:var(--red);color:#fff;box-shadow:0 4px 12px rgba(193,63,70,.22)}
+.danger-btn:hover{background:#a53339}
+.primary-btn:disabled,.secondary-btn:disabled,.danger-btn:disabled{opacity:.6;cursor:not-allowed}
 .primary-btn--full{width:100%;height:44px}
 .secondary-btn{background:#fff;border-color:var(--line);color:#455652}
 .secondary-btn:hover{border-color:#c8d2cf;background:#f9fbfb}
@@ -89,7 +91,24 @@ code{font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#5f6f6b;bac
 .search-field{width:min(420px,100%);height:37px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 10px;color:#8c9996;background:#fcfdfd}
 .search-field input{border:0;outline:0;width:100%;font-size:11px;background:transparent}
 .filter-group{display:flex;align-items:center;gap:7px;color:#82908d}
-.filter-group select{height:34px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:0 9px;color:#52615e;font-size:11px;outline:0}
+
+/* Custom dropdown (Select.jsx) — replaces native <select> app-wide. */
+.select-root{position:relative;display:inline-flex}
+.select-trigger{height:34px;min-width:120px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:0 9px;display:inline-flex;align-items:center;justify-content:space-between;gap:8px;color:#52615e;font-size:11px;font-weight:500;outline:0;transition:border-color .15s,box-shadow .15s}
+.select-trigger:hover:not(:disabled){border-color:#c8d2cf;background:#fcfdfd}
+.select-trigger:focus-visible{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
+.select-trigger:disabled{opacity:.6;cursor:not-allowed}
+.select-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.select-value--muted{color:#8c9996}
+.select-chevron{flex:none;color:#8c9996;transition:transform .15s}
+.select-chevron--open{transform:rotate(180deg)}
+.select-list{position:fixed;z-index:60;min-width:120px;max-height:260px;overflow-y:auto;margin:0;padding:5px;list-style:none;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 34px rgba(22,41,38,.14);animation:select-in .12s ease-out}
+.select-option{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:11px;color:#394b47;cursor:pointer;white-space:nowrap}
+.select-option:hover,.select-option--active{background:#f2f7f6;color:#1d3a36}
+.select-option--selected{color:var(--teal);font-weight:700}
+.select-option--disabled{opacity:.45;cursor:not-allowed}
+.select-option-check{margin-left:auto;flex:none;color:var(--teal)}
+@keyframes select-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 .result-count{display:flex;align-items:center;gap:6px;color:#82908d;font-size:10px}
 .pagination{border-top:1px solid var(--line);padding:11px 18px;display:flex;justify-content:space-between;align-items:center;color:#899592;font-size:10px}
 .pagination div{display:flex;gap:6px}
@@ -107,5 +126,32 @@ code{font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#5f6f6b;bac
 .not-found h1{font:800 28px "Manrope";color:#20322f;margin:0}
 .not-found p{font-size:12px;margin:0 0 10px}
 
+/* Toast notifications (ToastContext) — stacked top-right above everything. */
+.toast-stack{position:fixed;top:18px;right:18px;z-index:120;display:flex;flex-direction:column;gap:9px;max-width:min(380px,calc(100vw - 36px))}
+.toast{display:flex;align-items:flex-start;gap:9px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:11px;padding:11px 12px;box-shadow:0 14px 38px rgba(22,41,38,.18);animation:toast-in .22s ease-out;font-size:11.5px;color:#2c3f3b;line-height:1.5}
+.toast--error{border-left-color:var(--red)}
+.toast--info{border-left-color:var(--blue)}
+.toast-icon{flex:none;margin-top:1px;color:var(--teal)}
+.toast--error .toast-icon{color:var(--red)}
+.toast--info .toast-icon{color:var(--blue)}
+.toast-text{flex:1;min-width:0;word-break:break-word}
+.toast-close{border:0;background:none;color:#9aa6a3;cursor:pointer;padding:2px;display:grid;place-items:center;border-radius:6px}
+.toast-close:hover{color:#51615e;background:#f2f7f6}
+@keyframes toast-in{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+
+/* Confirmation modal (ConfirmModal) — centered dialog over a dimmed backdrop. */
+.modal-backdrop{position:fixed;inset:0;z-index:110;background:rgba(10,25,23,.48);display:flex;align-items:center;justify-content:center;padding:20px;animation:modal-fade .16s ease-out}
+.modal-card{width:min(400px,100%);background:#fff;border-radius:16px;padding:24px;text-align:center;box-shadow:0 28px 70px rgba(22,41,38,.3);animation:modal-pop .18s ease-out}
+.modal-icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;margin:0 auto 13px}
+.modal-icon--danger{background:var(--red-2);color:var(--red)}
+.modal-icon--primary{background:var(--teal-2);color:var(--teal)}
+.modal-title{font:700 16px "Manrope",sans-serif;color:#20322f;margin:0 0 8px}
+.modal-message{font-size:12px;color:#5b6966;line-height:1.6;margin:0 0 18px}
+.modal-actions{display:flex;gap:9px;justify-content:center}
+.modal-actions .primary-btn,.modal-actions .secondary-btn,.modal-actions .danger-btn{min-width:110px}
+@keyframes modal-fade{from{opacity:0}to{opacity:1}}
+@keyframes modal-pop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+
 @keyframes shimmer{0%{opacity:.55}50%{opacity:1}100%{opacity:.55}}
 @keyframes spin{to{transform:rotate(360deg)}}
+.spin-inline{animation:spin .8s linear infinite}

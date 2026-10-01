@@ -10,4 +10,5 @@ export { default as MetricCard } from "./MetricCard";
 export { default as Brand } from "./Brand";
 export { default as TabBar } from "./TabBar";
 export { SkeletonRows, DetailSkeleton } from "./Skeletons";
+export { default as Select } from "./Select";
 export { SearchBox, FilterSelect, ResultCount } from "./Toolbar";

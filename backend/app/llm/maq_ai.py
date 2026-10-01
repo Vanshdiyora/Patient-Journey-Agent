@@ -27,6 +27,17 @@ class MAQAIClient:
         content = self.chat(messages)
         return parse_json_object(content)
 
+    def chat_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None):
+        """OpenAI-compatible chat completion that may return tool_calls."""
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": settings.maq_ai_temperature,
+        }
+        if tools:
+            kwargs["tools"] = tools
+        return self.client.chat.completions.create(**kwargs)
+
 
 def parse_json_object(content: str) -> dict[str, Any]:
     text = content.strip()

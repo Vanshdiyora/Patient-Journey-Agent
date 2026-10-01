@@ -38,8 +38,9 @@
   .breadcrumb{display:none}
   .toolbar{align-items:stretch;flex-direction:column}
   .search-field{width:100%}
-  .filter-group{width:100%;overflow:auto}
-  .filter-group select{flex:1;min-width:125px}
+  .filter-group{width:100%;overflow:visible}
+  .filter-group .select-root{flex:1}
+  .filter-group .select-trigger{width:100%;min-width:125px}
   .patient-hero{align-items:flex-start}
   .patient-meta{flex-wrap:wrap;gap:7px 12px}
   .patient-identity h1{font-size:21px}

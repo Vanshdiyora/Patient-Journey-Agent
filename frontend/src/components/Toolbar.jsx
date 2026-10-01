@@ -1,5 +1,6 @@
 import React from "react";
 import { Search } from "lucide-react";
+import Select from "./Select";
 
 /**
  * Toolbar building blocks for list pages.
@@ -16,12 +17,12 @@ export function SearchBox({ value, onChange, placeholder = "Searchâ€¦" }) {
 
 export function FilterSelect({ label, value, onChange, options }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} aria-label={label}>
-      <option value="">{label}</option>
-      {options.map(opt => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
+    <Select
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={[{ value: "", label }, ...options]}
+    />
   );
 }
 

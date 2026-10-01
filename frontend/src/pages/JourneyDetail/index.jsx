@@ -7,6 +7,8 @@ import { formatDate, getErrorMessage, toList } from "../../utils";
 import { useAuth } from "../../context/AuthContext";
 import { canViewObservability } from "../../utils/roles";
 import { PageHeading, Panel, ErrorState, Badge, AlertBanner, DetailSkeleton } from "../../components";
+import { useConfirm } from "../../components/ConfirmModal";
+import { useToast } from "../../context/ToastContext";
 import StepsTimeline from "./StepsTimeline";
 import JourneyProgress from "./JourneyProgress";
 import { ContextPanel, EventsPanel, AgentActivityPanel, ActionsPanel } from "./panels";
@@ -21,6 +23,8 @@ export default function JourneyDetail() {
 
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [confirm, confirmModal] = useConfirm();
+  const toast = useToast();
   const { user } = useAuth();
   const observability = canViewObservability(user);
 
@@ -34,15 +38,28 @@ export default function JourneyDetail() {
   const agentRows = toList(agents.data);
 
   const run = async (type, fn) => {
+    const ok = await confirm({
+      title: type === "orchestrate" ? "Run orchestration?" : "Re-evaluate this journey?",
+      message: type === "orchestrate"
+        ? "The orchestration agents will run for this journey and may schedule new actions."
+        : "Step statuses will be recomputed from the latest events.",
+      confirmLabel: type === "orchestrate" ? "Orchestrate" : "Evaluate",
+      intent: "primary",
+    });
+    if (!ok) return;
     setBusy(type);
     setMessage("");
     try {
       await fn();
-      setMessage(type === "orchestrate" ? "Orchestration completed." : "Evaluation completed.");
+      const successText = type === "orchestrate" ? "Orchestration completed." : "Evaluation completed.";
+      setMessage(successText);
+      toast.success(successText);
       await journey.refetch();
       await steps.refetch();
     } catch (e) {
-      setMessage(getErrorMessage(e));
+      const errorText = getErrorMessage(e);
+      setMessage(errorText);
+      toast.error(errorText);
     } finally {
       setBusy("");
     }
@@ -54,9 +71,12 @@ export default function JourneyDetail() {
     try {
       await journeysApi.addEvent(journeyId, payload);
       setMessage("Event added successfully.");
+      toast.success("Event added successfully.");
       await events.refetch();
     } catch (err) {
-      setMessage(getErrorMessage(err));
+      const errorText = getErrorMessage(err);
+      setMessage(errorText);
+      toast.error(errorText);
     } finally {
       setBusy("");
     }
@@ -98,5 +118,6 @@ export default function JourneyDetail() {
         <ActionsPanel actionRows={actionRows} />
       </div>
     </div>
+    {confirmModal}
   </div>;
 }

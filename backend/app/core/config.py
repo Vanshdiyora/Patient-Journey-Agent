@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     maq_ai_base_url: str = "https://llm.maqsoftware.net/v1"
     maq_ai_api_key: str = ""
     maq_ai_model: str = "qwen-3.8-27b"
-    maq_ai_timeout_seconds: int = 90
+    maq_ai_timeout_seconds: int = 600
     maq_ai_temperature: float = 0.0
     maq_ai_enabled: bool = True
 

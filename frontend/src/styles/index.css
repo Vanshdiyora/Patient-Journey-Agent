@@ -8,12 +8,14 @@
  *   3. layout      — shell, sidebar, topbar, portal part accents
  *   4. ui          — shared primitives (buttons, panels, tables, badges…)
  *   5. pages       — feature-page specifics
- *   6. portals     — portal accent variables
- *   7. responsive  — media queries last so they can override anything above
+ *   6. chat        — assistant chat widget (launcher, panel, bubbles)
+ *   7. portals     — portal accent variables
+ *   8. responsive  — media queries last so they can override anything above
  */
 @import "./tokens.css";
 @import "./layout.css";
 @import "./ui.css";
 @import "./pages.css";
+@import "./chat.css";
 @import "./portals.css";
 @import "./responsive.css";

@@ -3,7 +3,9 @@ import { ShieldCheck, UserCog } from "lucide-react";
 import { adminApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../../utils";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner } from "../../components";
+import { useConfirm } from "../../components/ConfirmModal";
+import { useToast } from "../../context/ToastContext";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner, Select } from "../../components";
 import { ROLES } from "../../utils/roles";
 
 export default function UserManagement() {
@@ -12,33 +14,54 @@ export default function UserManagement() {
   const users = toList(data, "items", "users");
   const [saving, setSaving] = useState("");
   const [feedback, setFeedback] = useState(null);
+  const [confirm, confirmModal] = useConfirm();
+  const toast = useToast();
 
   const setRole = async (u, role) => {
+    if (role === u.role) return;
+    const ok = await confirm({
+      title: `Change role to ${humanize(role)}?`,
+      message: `${u.display_name || u.email} will immediately gain the permissions of the ${humanize(role)} role.`,
+      confirmLabel: "Change role",
+      intent: "primary",
+    });
+    if (!ok) {
+      setRefreshKey(k => k + 1); // revert the Select to the stored role
+      return;
+    }
+    await applyRole(u, role);
+  };
+
+  const applyRole = async (u, role) => {
     setSaving(u.id);
-    setFeedback(null);
     try {
       await adminApi.setUserRole(u.id, { role });
-      setFeedback({ tone: "success", text: `${u.display_name || u.email} is now ${humanize(role)}.` });
+      toast.success(`${u.display_name || u.email} is now ${humanize(role)}.`);
       setRefreshKey(k => k + 1);
     } catch (err) {
-      setFeedback({ tone: "error", text: getErrorMessage(err) });
-    } finally {
-      setSaving("");
-    }
+      toast.error(getErrorMessage(err));
+      setRefreshKey(k => k + 1);
+    } setSaving("");
   };
 
   const toggleActive = async (u) => {
+    const ok = await confirm({
+      title: u.is_active ? "Deactivate this account?" : "Reactivate this account?",
+      message: u.is_active
+        ? `${u.display_name || u.email} will immediately lose access to the workspace.`
+        : `${u.display_name || u.email} will regain access to the workspace.`,
+      confirmLabel: u.is_active ? "Deactivate" : "Reactivate",
+      intent: u.is_active ? "danger" : "primary",
+    });
+    if (!ok) return;
     setSaving(u.id);
-    setFeedback(null);
     try {
       await adminApi.setUserActive(u.id, { is_active: !u.is_active });
-      setFeedback({ tone: "success", text: `${u.display_name || u.email} ${u.is_active ? "deactivated" : "reactivated"}.` });
+      toast.success(`${u.display_name || u.email} ${u.is_active ? "deactivated" : "reactivated"}.`);
       setRefreshKey(k => k + 1);
     } catch (err) {
-      setFeedback({ tone: "error", text: getErrorMessage(err) });
-    } finally {
-      setSaving("");
-    }
+      toast.error(getErrorMessage(err));
+    } setSaving("");
   };
 
   return <div>
@@ -61,14 +84,13 @@ export default function UserManagement() {
                     <div><span className="table-primary">{u.display_name || u.email}</span><span>{u.email}</span></div>
                   </div></td>
                   <td>
-                    <select
+                    <Select
                       value={u.role}
                       disabled={saving === u.id}
-                      onChange={e => setRole(u, e.target.value)}
-                      style={{ padding: "6px 8px", borderRadius: 7, border: "1px solid var(--line)", fontSize: 11 }}
-                    >
-                      {Object.values(ROLES).map(r => <option key={r} value={r}>{humanize(r)}</option>)}
-                    </select>
+                      onChange={v => setRole(u, v)}
+                      options={Object.values(ROLES).map(r => ({ value: r, label: humanize(r) }))}
+                      className="role-select"
+                    />
                   </td>
                   <td><Badge kind="status" value={u.is_active ? "active" : "cancelled"} fallback={u.is_active ? "Active" : "Inactive"} /></td>
                   <td>
@@ -81,5 +103,6 @@ export default function UserManagement() {
             </table></div>
           ) : <EmptyState icon={ShieldCheck} title="No users" text="No identities are registered yet." />}
     </Panel>
+    {confirmModal}
   </div>;
 }

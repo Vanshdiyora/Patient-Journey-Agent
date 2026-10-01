@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.core.dependencies import get_current_user
 from app.api.v1 import health, patients, journeys, events, exceptions, agents, actions, dashboard, me, admin
+from app.api.v1.chat import router as chat_router
 from app.auth import router as auth_router
 api_router=APIRouter()
 api_router.include_router(auth_router, tags=["auth"])
@@ -14,6 +15,7 @@ api_router.include_router(exceptions.router, tags=["exceptions"])
 api_router.include_router(agents.router, tags=["agents"])
 api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(dashboard.router, tags=["dashboard"])
+api_router.include_router(chat_router, tags=["chat"])
 
 @api_router.get("/users/me")
 def me(user=Depends(get_current_user)):
