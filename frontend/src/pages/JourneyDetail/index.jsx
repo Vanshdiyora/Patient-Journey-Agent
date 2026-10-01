@@ -5,6 +5,7 @@ import { journeysApi, agentsApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { formatDate, getErrorMessage, toList } from "../../utils";
 import { useAuth } from "../../context/AuthContext";
+import { canViewObservability } from "../../utils/roles";
 import { PageHeading, Panel, ErrorState, Badge, AlertBanner, DetailSkeleton } from "../../components";
 import StepsTimeline from "./StepsTimeline";
 import JourneyProgress from "./JourneyProgress";

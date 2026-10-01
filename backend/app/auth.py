@@ -1,12 +1,14 @@
 """Email/password authentication backed by bcrypt hashes in PostgreSQL."""
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Annotated, Any
 from uuid import UUID
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, Field
+from email_validator import EmailNotValidError, validate_email
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -20,14 +22,45 @@ JWT_ALGORITHM = "HS256"
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_login_email(cls, value: Any) -> str:
+        return normalize_account_email(value)
 
 
 class UserResponse(BaseModel):
-    email: EmailStr
+    email: str
     name: str
     role: str
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_user_email(cls, value: Any) -> str:
+        return normalize_account_email(value)
+
+
+def normalize_account_email(value: Any) -> str:
+    """Validate normal emails while allowing seeded, non-deliverable .test accounts."""
+    if not isinstance(value, str):
+        raise ValueError("Email address must be text.")
+    email = value.strip().lower()
+    if email.count("@") != 1:
+        raise ValueError("Enter a valid email address.")
+    local, domain = email.rsplit("@", 1)
+    if domain.endswith(".test"):
+        # RFC-style simple syntax validation for reserved local test domains.
+        if not local or len(local) > 64 or not re.fullmatch(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+", local):
+            raise ValueError("Enter a valid email address.")
+        if len(email) > 254 or ".." in local or local.startswith(".") or local.endswith("."):
+            raise ValueError("Enter a valid email address.")
+        return email
+    try:
+        return validate_email(email, check_deliverability=False).normalized
+    except EmailNotValidError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def user_response(user: User) -> dict[str, Any]:
