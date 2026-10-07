@@ -54,6 +54,17 @@ class Settings(BaseSettings):
             raise ValueError("CORS_ORIGINS must be a comma-separated string or a JSON array of URLs")
         return [origin.strip() for origin in value]
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value):
+        # Use the driver in requirements.txt regardless of SQLAlchemy defaults.
+        # Keep credentials and Neon SSL/query options exactly as provided.
+        if isinstance(value, str):
+            for prefix in ("postgres://", "postgresql://"):
+                if value.startswith(prefix):
+                    return "postgresql+psycopg2://" + value[len(prefix):]
+        return value
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

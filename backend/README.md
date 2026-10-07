@@ -17,6 +17,49 @@ This backend implements the architecture from the project approach document:
 
 All protected API routes require an email/password login and a signed bearer token. User passwords are stored as bcrypt hashes.
 
+## Complete Neon database setup
+
+Create an empty database or branch in Neon, then copy its full connection URL
+from the Connect dialog into `backend/.env`. Retain its SSL and connection
+options. The backend accepts `postgresql://` and `postgresql+psycopg2://` URLs.
+Neon connection instructions: https://neon.com/docs/get-started/connect-neon
+
+Run from the repository root:
+
+```powershell
+python -m pip install -r backend/requirements.txt
+# If backend/.env is missing, copy backend/.env.example to backend/.env first.
+# Set DATABASE_URL in backend/.env to your Neon URL before continuing.
+python backend/scripts/setup_database.py
+```
+
+The command creates all 15 application tables, applies every SQL migration,
+and seeds every table: 1,200 patients, 2,400 staff/patient accounts, six
+pathways, 48 template steps, 42 dependencies, 48 action rules, 1,100 journeys,
+8,800 journey steps, 6,600 events, 2,200 action executions, 1,100 exceptions,
+4,400 agent runs, and synthetic chat sessions, messages, and audit entries for
+active users. Each patient has a linked portal account. Step time limits are
+backfilled by the migrations. All demo passwords are `Test@123`, stored as
+bcrypt hashes. Hash generation can take several minutes.
+
+Schema creation, migrations, seeding, and verification share one transaction;
+any failure rolls back the entire setup. The command refuses databases with
+existing application data and never runs the legacy seed's delete statements.
+It reads `backend/.env` regardless of the shell directory; an exported
+`DATABASE_URL` takes precedence. It does not create a Neon account or project.
+
+After setup, check the row counts without changing data:
+
+```powershell
+python backend/scripts/setup_database.py --verify-only
+```
+
+To find active demonstration login emails:
+
+```sql
+SELECT email, role FROM users WHERE is_active ORDER BY role, email LIMIT 20;
+```
+
 ## Existing database
 
 This code expects the PostgreSQL schema/seed already created for Patient Journey Orchestrator. It does **not** run `Base.metadata.create_all()` against the existing database.

@@ -4,6 +4,10 @@ Production-style React/Vite UI for the Patient Journey Orchestrator API.
 
 ## Run
 
+Use Node.js 20.19+ or 22.12+ (required by Vite 7). Check with `node --version`.
+If startup fails with `crypto.hash is not a function`, upgrade Node.js and restart
+your terminal before running the commands below.
+
 ```bash
 npm install
 copy .env.example .env
