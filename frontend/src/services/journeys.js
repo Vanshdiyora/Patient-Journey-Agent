@@ -19,4 +19,6 @@ export const journeysApi = {
   events: (id, params) => get(`/api/v1/journeys/${id}/events`, params),
   addEvent: (id, payload) => post(`/api/v1/journeys/${id}/events`, payload),
   actions: (id) => get(`/api/v1/journeys/${id}/actions`),
+  approveAction: (actionId) => post(`/api/v1/actions/${actionId}/approve`),
+  rejectAction: (actionId, note) => post(`/api/v1/actions/${actionId}/reject`, { note }),
 };

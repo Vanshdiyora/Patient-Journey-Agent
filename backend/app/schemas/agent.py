@@ -13,3 +13,8 @@ class OrchestrationResponse(BaseModel):
     result: dict[str, Any]|None=None
     outcomes: list[dict[str, Any]] = Field(default_factory=list)
     calls: list[dict[str, Any]] = Field(default_factory=list)
+    summary: str | None = None
+    mode: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    step_changes: list[dict[str, Any]] = Field(default_factory=list)
+    journey_status: dict[str, Any] | None = None

@@ -294,6 +294,27 @@ expired, and read-only data access — is persisted in `chat_audit_log`
 (migration `migrations/20261007_add_chat_audit.sql`). Administrators can read
 the trail via `GET /api/v1/chat/audit`.
 
+## Orchestration agents (Orchestrate button)
+
+`POST /journeys/{id}/orchestrate` runs the LangGraph in `app/orchestration/langgraph_supervisor.py`:
+rules -> Supervisor -> (Journey Intelligence | Coordination -> Action Executor -> rules again) -> wait / escalate.
+
+**When does a step's status change?**
+
+| Who | When |
+|---|---|
+| Rule engine (every orchestrate / evaluate / event) | Pending -> Ready when earlier steps are done and dependencies are met; -> Blocked when a dependency is unmet or the step is past its due date; journey status follows. Cancelled journeys are never reopened. |
+| Agent | **Only** `Completed`, and only when all hold: the step's owner is `AGENT`; it is Ready/In progress; the action ran and passed verification; the action fulfils that step type (appointment action -> appointment/follow-up step, document request -> lab/document/referral step, reminder -> reminder/education/counselling step). Otherwise the action is sent as support and the step is untouched. |
+| Staff / patient | Complete steps through the UI, subject to the step owner's role. |
+
+Other behaviour: approval-gated actions (`CREATE_COORDINATOR_TASK`) are recorded as `REQUESTED` and surfaced as an exception, never auto-run - staff **Approve / Reject** them under *Journey actions* on the journey page (`POST /api/v1/actions/{id}/approve|reject`; approving creates a real coordinator task on the Exceptions page); `ESCALATE` opens an exception for staff; the same action for the same step is never sent twice (idempotency).
+
+**If the AI is unavailable or returns something unusable** (bad key, timeout, invalid JSON, unknown capability or action, made-up step id) the run does not fail: it continues on the built-in rules (`mode: RULES_ONLY`) and says so in the summary. The response and the saved run include `summary`, `mode`, `warnings` and `step_changes`. Saved runs use `status` SUCCESS/FAILED (DB enum); how the run ended (WAIT / ESCALATE) is `output.final_state`.
+
+### Real patient messages (SMTP)
+
+Reminders, document requests and appointment requests/reschedules are emailed to the patient's email on file when these are set in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty the actions are **simulated** and labelled "Simulated (email not configured)" everywhere in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). A patient with no email makes the action fail and the run escalate. Error text saved to `agent_runs` is scrubbed of API keys and tokens.
+
 ## Main endpoints
 
 - `GET /api/v1/health`

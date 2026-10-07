@@ -15,6 +15,17 @@ class JourneyRuleEngine:
         journey = self.db.query(Journey).filter(Journey.id == journey_id).first()
         if not journey:
             return None
+        if journey.status == "CANCELLED":
+            # A cancelled journey stays cancelled: evaluating it must not
+            # reopen steps or flip it back to ACTIVE/BLOCKED.
+            rows = (
+                self.db.query(JourneyStep).join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+                .filter(JourneyStep.journey_id == journey_id).order_by(PathwayStep.sequence_number.asc()).all()
+            )
+            return {"journey": journey, "steps": [
+                {"step_id": str(s.id), "status": s.status, "ready": False, "blocked": False, "reason": None}
+                for s in rows
+            ]}
         now = datetime.now(timezone.utc)
         steps = (
             self.db.query(JourneyStep)
