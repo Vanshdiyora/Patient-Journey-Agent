@@ -6,7 +6,7 @@ state (verified, step_completed, status) is deliberately absent.
 from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Event types a patient may submit. Everything else is rejected.
 PATIENT_EVENT_TYPES = {
@@ -28,6 +28,18 @@ class PatientEventCreate(BaseModel):
     model_config = ConfigDict(json_schema_extra={
         "example": {"event_type": "SYMPTOM_REPORTED", "payload": {"comment": "Feeling better today"}}
     })
+
+
+class PatientStepSubmission(BaseModel):
+    comment: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("comment")
+    @classmethod
+    def strip_comment(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Describe what you completed.")
+        return value
 
 
 class PatientEventResponse(BaseModel):

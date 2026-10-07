@@ -12,9 +12,65 @@ import ChatMessageItem from "./ChatMessageItem";
 
 const VOICE_LANG = "en-US";
 
+function mergeMessages(current, incoming) {
+  const rows = [...current];
+  for (const message of incoming.filter(Boolean)) {
+    const index = rows.findIndex(row => row.id === message.id);
+    if (index >= 0) rows[index] = message;
+    else rows.push(message);
+  }
+  return rows;
+}
+
+function waitForOpen(socket) {
+  if (socket.readyState === WebSocket.OPEN) return Promise.resolve(socket);
+  if (socket.readyState !== WebSocket.CONNECTING) return Promise.reject(new Error("Chat connection is unavailable."));
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.removeEventListener("open", onOpen);
+      socket.removeEventListener("error", onFailure);
+      socket.removeEventListener("close", onFailure);
+    };
+    const onOpen = () => { cleanup(); resolve(socket); };
+    const onFailure = () => { cleanup(); reject(new Error("Could not connect to chat. Please try again.")); };
+    const timer = setTimeout(() => { cleanup(); socket.close(); reject(new Error("Chat connection timed out.")); }, 10000);
+    socket.addEventListener("open", onOpen);
+    socket.addEventListener("error", onFailure);
+    socket.addEventListener("close", onFailure);
+  });
+}
+
+function socketRequest(socket, payload, onTyping) {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.removeEventListener("message", onMessage);
+      socket.removeEventListener("close", onClose);
+      socket.removeEventListener("error", onClose);
+    };
+    const onMessage = event => {
+      let frame;
+      try { frame = JSON.parse(event.data); } catch { return; }
+      if (frame.request_id !== requestId && !(frame.type === "error" && !frame.request_id)) return;
+      if (frame.type === "typing") { onTyping?.(); return; }
+      if (frame.type === "message" || frame.type === "action") { cleanup(); resolve(frame); }
+      if (frame.type === "error") { cleanup(); reject(new Error(frame.detail || "Chat request failed.")); }
+    };
+    const onClose = () => { cleanup(); reject(new Error("Chat connection closed while processing. Check history before retrying.")); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error("Chat response timed out. Check history before retrying.")); }, 610000);
+    socket.addEventListener("message", onMessage);
+    socket.addEventListener("close", onClose);
+    socket.addEventListener("error", onClose);
+    try { socket.send(JSON.stringify({ ...payload, request_id: requestId })); }
+    catch (error) { cleanup(); reject(error); }
+  });
+}
+
 /**
- * Floating assistant available in every portal. Transport prefers the
- * WebSocket; falls back to REST if the socket is not open. All role scoping
+ * Floating assistant available in every portal. Chat turns and action
+ * decisions use the WebSocket. All role scoping
  * is enforced server-side — the UI only mirrors it (e.g. patient-safe
  * actions, staff-only orchestration surfaces).
  */
@@ -37,9 +93,9 @@ export default function ChatWidget() {
 
   const scrollRef = useRef(null);
   const socketRef = useRef(null);
+  const sendingRef = useRef(false);
   const recognitionRef = useRef(null);
   const sessionRef = useRef(null);
-  sessionRef.current = sessionId;
 
   const isPatient = user?.role?.toUpperCase() === "PATIENT";
 
@@ -54,11 +110,17 @@ export default function ChatWidget() {
   const loadMessages = useCallback((id) => {
     if (!id) return;
     chatApi.messages(id)
-      .then(r => setMessages(r.items || []))
-      .catch(() => setMessages([]));
+      .then(r => {
+        if (sessionRef.current === id) {
+          setMessages(prev => mergeMessages(r.items || [], prev.filter(m => m.session_id === id)));
+        }
+      })
+      .catch(() => { if (sessionRef.current === id) setError("Could not load this conversation."); });
   }, []);
 
   const startNewChat = useCallback(() => {
+    if (sendingRef.current) return;
+    sessionRef.current = null;
     setSessionId(null);
     setMessages([]);
     setView("chat");
@@ -66,7 +128,10 @@ export default function ChatWidget() {
   }, []);
 
   const openSession = useCallback((id) => {
+    if (sendingRef.current) return;
+    sessionRef.current = id;
     setSessionId(id);
+    setMessages([]);
     loadMessages(id);
     setView("chat");
   }, [loadMessages]);
@@ -83,80 +148,54 @@ export default function ChatWidget() {
 
   // ------------------------------------------------------------ websocket
 
-  const ensureSocket = useCallback(() => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      return socketRef.current;
+  const ensureSocket = useCallback(async () => {
+    let socket = socketRef.current;
+    if (!socket || socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
+      socket = openChatSocket(token);
+      socketRef.current = socket;
+      socket.addEventListener("close", () => {
+        if (socketRef.current === socket) socketRef.current = null;
+      });
     }
-    const socket = openChatSocket({
-      onEvent: (event) => {
-        if (event.type === "typing") setTyping(true);
-        if (event.type === "message") {
-          setTyping(false);
-          setSending(false);
-          const sid = event.session_id;
-          if (sid && sid !== sessionRef.current) setSessionId(sid);
-          setMessages(prev => [...prev, event.user_message, event.assistant_message]);
-        }
-        if (event.type === "error") {
-          setTyping(false);
-          setSending(false);
-          setError(event.detail || "Something went wrong.");
-        }
-      },
-      onClose: () => { socketRef.current = null; },
-    });
-    socketRef.current = socket;
-    return socket;
-  }, []);
-
-  const sendViaSocket = (socket, content) => new Promise((resolve, reject) => {
-    const onFrame = (e) => {
-      let frame;
-      try { frame = JSON.parse(e.data); } catch { return; }
-      if (frame.type === "message" || frame.type === "error") {
-        socket.removeEventListener("message", onFrame);
-        frame.type === "error" ? reject(new Error(frame.detail)) : resolve(frame);
-      }
-    };
-    socket.addEventListener("message", onFrame);
-    socket.send(JSON.stringify({ type: "message", content, session_id: sessionId }));
-  });
+    return waitForOpen(socket);
+  }, [token]);
 
   const send = async (text) => {
     const content = (text ?? input).trim();
-    if (!content || sending) return;
+    if (!content || sendingRef.current) return;
+    sendingRef.current = true;
     setError("");
     setInput("");
+    const localId = `local-${crypto.randomUUID()}`;
     setMessages(prev => [...prev, {
-      id: `local-${Date.now()}`, session_id: sessionId, role: "user",
+      id: localId, session_id: sessionRef.current, role: "user",
       content, meta: null, created_at: new Date().toISOString(),
     }]);
     setSending(true);
+    let sid = sessionRef.current;
+    let requestStarted = false;
     try {
-      const socket = ensureSocket();
-      if (socket.readyState === WebSocket.OPEN) {
-        try {
-          await sendViaSocket(socket, content);
-          return;
-        } catch {
-          // fall through to REST fallback
-        }
-      }
-      // REST fallback (also covers the very first message: socket not open yet).
-      let sid = sessionId;
+      const socket = await ensureSocket();
       if (!sid) {
         const created = await chatApi.createSession();
         sid = created.id;
+        sessionRef.current = sid;
         setSessionId(sid);
       }
-      const result = await chatApi.sendMessage(sid, content);
-      setMessages(prev => [...prev, result.user_message, result.assistant_message]);
+      requestStarted = true;
+      const result = await socketRequest(socket, { type: "message", session_id: sid, content }, () => {
+        if (sessionRef.current === sid) setTyping(true);
+      });
+      if (sessionRef.current === sid) {
+        setMessages(prev => mergeMessages(prev.filter(m => m.id !== localId), [result.user_message, result.assistant_message]));
+      }
       loadSessions();
     } catch (err) {
       setError(getErrorMessage(err));
-      setMessages(prev => prev.filter(m => !m.id.startsWith("local-")));
-      setInput(content); // restore the user's text so nothing is lost
+      setMessages(prev => prev.filter(m => m.id !== localId));
+      if (!requestStarted && sessionRef.current === sid) setInput(content);
     } finally {
+      sendingRef.current = false;
       setSending(false);
       setTyping(false);
     }
@@ -165,19 +204,20 @@ export default function ChatWidget() {
   // ------------------------------------------------------- action confirm
 
   const resolveAction = async (messageId, action) => {
-    if (!sessionId || !messageId) return;
+    if (!sessionRef.current || !messageId || sendingRef.current) return;
+    const sid = sessionRef.current;
+    sendingRef.current = true;
     setSending(true);
     try {
-      const result = action === "confirm"
-        ? await chatApi.confirmAction(sessionId, messageId)
-        : await chatApi.rejectAction(sessionId, messageId);
-      setMessages(prev => prev.map(m => (
-        m.id === messageId ? result.message || result.confirmed_message : m
-      )));
-      if (result.result_message) setMessages(prev => [...prev, result.result_message]);
+      const socket = await ensureSocket();
+      const result = await socketRequest(socket, { type: action, session_id: sid, message_id: messageId });
+      if (sessionRef.current === sid) {
+        setMessages(prev => mergeMessages(prev.map(m => m.id === messageId ? result.message : m), [result.result_message]));
+      }
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -301,8 +341,8 @@ export default function ChatWidget() {
                   <strong>CarePath Assistant</strong>
                   <span>{typing ? "typing…" : isPatient ? "Patient portal" : "Staff portal"}</span>
                 </div>
-                <button className="chat-icon-btn" onClick={startNewChat} aria-label="New conversation" title="New conversation"><Plus size={17} /></button>
-                <button className="chat-icon-btn" onClick={() => { loadSessions(); setView("history"); }} aria-label="History" title="History"><Archive size={17} /></button>
+                <button className="chat-icon-btn" disabled={sending} onClick={startNewChat} aria-label="New conversation" title="New conversation"><Plus size={17} /></button>
+                <button className="chat-icon-btn" disabled={sending} onClick={() => { loadSessions(); setView("history"); }} aria-label="History" title="History"><Archive size={17} /></button>
               </>
             )}
             <button className="chat-icon-btn" onClick={() => setOpen(false)} aria-label="Close assistant"><X size={17} /></button>
@@ -332,7 +372,7 @@ export default function ChatWidget() {
                     <div className="chat-suggestions">
                       {(isPatient
                         ? ["I want to add an update", "Show my care plan status", "I have a question for my care team"]
-                        : ["Show recent journeys", "Record a symptom update", "Re-evaluate a journey"]
+                        : ["Show recent journeys", "Start the knee pathway for a patient", "What tasks are pending?"]
                       ).map(s => (
                         <button key={s} className="chat-suggestion" onClick={() => send(s)}>{s}</button>
                       ))}

@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.authorization import get_owned_patient, require_patient
-from app.models import Journey, Patient, PatientEvent
+from app.models import Journey, JourneyStep, PathwayStep, Patient, PatientEvent
 from app.schemas.patient_event import (
     PATIENT_EVENT_TYPES,
     PATIENT_PAYLOAD_KEYS,
     PatientEventCreate,
     PatientEventResponse,
+    PatientStepSubmission,
 )
 from app.schemas import JourneyResponse, JourneyStepResponse
 from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
@@ -116,6 +117,72 @@ def submit_patient_event(
         processed=False,  # patient reports are reviewed, never auto-applied
         created_at=datetime.now(timezone.utc),
     )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.post(
+    "/journeys/{journey_id}/steps/{step_id}/submit",
+    response_model=PatientEventResponse,
+    status_code=201,
+)
+def submit_patient_step(
+    journey_id: UUID,
+    step_id: UUID,
+    data: PatientStepSubmission,
+    user=Depends(require_patient),
+    db: Session = Depends(get_db),
+):
+    patient_id = get_owned_patient(user)
+    journey = _own_journey(journey_id, db, patient_id)
+    row = (
+        db.query(JourneyStep, PathwayStep)
+        .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+        .filter(JourneyStep.id == step_id, JourneyStep.journey_id == journey.id)
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, "Journey step not found")
+    step, pathway_step = row
+    if (step.owner_role or pathway_step.owner_role) != "PATIENT":
+        raise HTTPException(403, "This journey step is not assigned to the patient.")
+    if step.status not in {"READY", "IN_PROGRESS"}:
+        raise HTTPException(409, "This task is not currently available for patient update.")
+    pending = (
+        db.query(PatientEvent)
+        .filter(
+            PatientEvent.journey_id == journey.id,
+            PatientEvent.event_type == "PATIENT_STEP_SUBMITTED",
+            PatientEvent.processed.is_(False),
+            PatientEvent.payload["journey_step_id"].astext == str(step.id),
+        )
+        .first()
+    )
+    if pending:
+        raise HTTPException(409, "Your update is already awaiting care-team review.")
+
+    now = datetime.now(timezone.utc)
+    event = PatientEvent(
+        id=uuid4(),
+        patient_id=patient_id,
+        journey_id=journey.id,
+        event_type="PATIENT_STEP_SUBMITTED",
+        source=PATIENT_SOURCE,
+        external_event_id=None,
+        event_time=now,
+        payload={
+            "journey_step_id": str(step.id),
+            "step_code": pathway_step.code,
+            "comment": data.comment,
+        },
+        processed=False,
+        created_at=now,
+    )
+    step.status = "IN_PROGRESS"
+    step.updated_at = now
     db.add(event)
     db.commit()
     db.refresh(event)

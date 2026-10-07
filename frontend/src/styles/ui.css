@@ -102,7 +102,7 @@ code{font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#5f6f6b;bac
 .select-value--muted{color:#8c9996}
 .select-chevron{flex:none;color:#8c9996;transition:transform .15s}
 .select-chevron--open{transform:rotate(180deg)}
-.select-list{position:fixed;z-index:60;min-width:120px;max-height:260px;overflow-y:auto;margin:0;padding:5px;list-style:none;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 34px rgba(22,41,38,.14);animation:select-in .12s ease-out}
+.select-list{position:fixed;z-index:130;min-width:120px;max-height:260px;overflow-y:auto;margin:0;padding:5px;list-style:none;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 12px 34px rgba(22,41,38,.14);animation:select-in .12s ease-out}
 .select-option{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:11px;color:#394b47;cursor:pointer;white-space:nowrap}
 .select-option:hover,.select-option--active{background:#f2f7f6;color:#1d3a36}
 .select-option--selected{color:var(--teal);font-weight:700}

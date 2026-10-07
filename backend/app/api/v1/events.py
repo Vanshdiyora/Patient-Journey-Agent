@@ -15,6 +15,14 @@ from app.orchestration.event_processor import EventProcessor
 
 router = APIRouter()
 
+STEP_COMPLETION_EVENT_TYPES = {
+    "STEP_COMPLETED",
+    "FOLLOWUP_COMPLETED",
+    "APPOINTMENT_COMPLETED",
+    "LAB_RESULT_AVAILABLE",
+    "DISCHARGE_COMPLETED",
+}
+
 
 @router.get("/journeys/{journey_id}/events", response_model=list[EventResponse])
 def events(journey_id: UUID, limit: int = 100, db: Session = Depends(get_db), user=Depends(require_staff)):
@@ -35,6 +43,15 @@ def add_event(journey_id: UUID, data: EventCreate, db: Session = Depends(get_db)
     journey = get_journey_for_action(journey_id, db, user, allowed_roles=STAFF_ROLES)
     if data.source in {"carepath-ui-patient", "patient-portal", "patient"}:
         raise HTTPException(403, "Patient-channel sources are reserved for patient APIs")
+    if (
+        data.event_type in STEP_COMPLETION_EVENT_TYPES
+        or "verified" in data.payload
+        or data.payload.get("step_completed") is True
+    ):
+        raise HTTPException(
+            422,
+            "Step completion must be recorded with the staff-only complete-step action.",
+        )
     try:
         event, _result = EventProcessor(db).ingest(
             journey.id, data.event_type, data.source, data.event_time, data.payload, data.external_event_id

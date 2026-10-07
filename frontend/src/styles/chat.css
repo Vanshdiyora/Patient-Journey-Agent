@@ -92,6 +92,38 @@
 .chat-footnote{padding:0 14px 10px;font-size:9px;color:#9aa6a3;text-align:center}
 
 .chat-spin{animation:chat-rotate 1s linear infinite}
+
+/* --- Structured tool-result rendering ---------------------------------- */
+.chat-data-card{border:1px solid var(--line);border-radius:11px;background:#fff;padding:9px 10px;margin-top:7px;animation:chat-pop .2s ease-out;display:flex;flex-direction:column;gap:6px}
+.chat-data-label{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#7d8d89}
+.chat-data-empty{font-size:10.5px;color:#7d8d89;padding:3px 1px}
+.chat-muted{color:#8a9693;font-size:10px;font-weight:400}
+
+.chat-patient-card{display:flex;align-items:center;gap:7px;font-size:11px;color:#263835;background:#f6fbfa;border:1px solid #cfe8e4;border-radius:9px;padding:6px 9px}
+
+.chat-journey-row{display:flex;align-items:center;gap:8px;justify-content:space-between;border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:11px;color:#263835}
+.chat-journey-main{display:flex;flex-direction:column;gap:1px;min-width:0}
+.chat-journey-main strong{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.chat-chip{font-size:9px;font-weight:700;border-radius:20px;padding:2px 8px;background:#eef3f2;color:#687572;text-transform:capitalize;white-space:nowrap}
+.chat-chip--ok{background:var(--green-2);color:var(--green)}
+.chat-chip--info{background:#e3f0fa;color:#2c6ea8}
+.chat-chip--warn{background:#fdf0e2;color:#a86318}
+
+.chat-steps{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.chat-step{display:flex;align-items:center;gap:7px;font-size:10.5px;color:#41534f}
+.chat-step-icon{width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:700;background:#eef3f2;color:#687572;flex:none}
+.chat-step--completed .chat-step-icon{background:var(--green-2);color:var(--green)}
+.chat-step--in_progress .chat-step-icon,.chat-step--ready .chat-step-icon{background:#e3f0fa;color:#2c6ea8}
+.chat-step--blocked .chat-step-icon{background:var(--red-2);color:var(--red)}
+.chat-step-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-step-due{color:#8a9693;font-size:9px;margin-left:auto;white-space:nowrap}
+.chat-step-block{font-size:8.5px;font-weight:700;color:var(--red);text-transform:uppercase}
+.chat-steps--compact .chat-step-name{font-weight:500}
+.chat-task-group{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+
+.chat-action-changes{margin:8px 0 0;padding-left:16px;font-size:10.5px;color:#41534f;display:flex;flex-direction:column;gap:2px}
+.chat-action-changes li{line-height:1.45}
 @keyframes chat-msg-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes chat-panel-in{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
 @keyframes chat-panel-out{to{opacity:0;transform:translateY(10px) scale(.97)}}

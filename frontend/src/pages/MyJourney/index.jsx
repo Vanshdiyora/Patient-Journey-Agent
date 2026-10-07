@@ -55,6 +55,10 @@ export default function MyJourney() {
   const stepRows = toList(steps.data);
   const eventRows = toList(events.data);
   const done = stepRows.filter(s => ["COMPLETED", "RESOLVED"].includes(String(s.status).toUpperCase())).length;
+  const submitStep = async (stepId, comment) => {
+    await meApi.submitStep(currentId, stepId, comment);
+    await Promise.all([steps.refetch(), events.refetch()]);
+  };
 
   if (journeys.loading) return <div className="skeleton-detail"><i /><i /><i /></div>;
   if (journeys.error) return <div className="empty-state"><strong>Could not load your journey</strong><span>{getErrorMessage(journeys.error)}</span></div>;
@@ -93,7 +97,7 @@ export default function MyJourney() {
       <JourneyPicker journeys={rows} currentId={currentId} onSelect={setSelectedId} />
       <ProgressCard done={done} total={stepRows.length} />
       <div className="content-grid content-grid--journey">
-        <CarePlanPanel steps={steps} stepRows={stepRows} />
+        <CarePlanPanel steps={steps} stepRows={stepRows} onSubmitStep={submitStep} />
         <UpdatesPanel events={events} eventRows={eventRows} currentId={currentId} onSent={() => events.refetch()} />
       </div>
     </>}
@@ -101,7 +105,7 @@ export default function MyJourney() {
     {tab === "plan" && <>
       <JourneyPicker journeys={rows} currentId={currentId} onSelect={setSelectedId} />
       <ProgressCard done={done} total={stepRows.length} />
-      <CarePlanPanel steps={steps} stepRows={stepRows} />
+      <CarePlanPanel steps={steps} stepRows={stepRows} onSubmitStep={submitStep} />
     </>}
 
     {tab === "updates" && (

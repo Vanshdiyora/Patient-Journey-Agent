@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -13,13 +14,14 @@ from app.core.authorization import (
     scope_patient_ids,
     scope_note,
 )
-from app.models import Journey, Patient, Pathway, PathwayStep
-from app.schemas import JourneyResponse, JourneyStepResponse
-from app.schemas.journey import JourneyStepTimeLimitUpdate
+from app.models import Journey, JourneyStep, Patient, PatientEvent, Pathway, PathwayStep
+from app.schemas import JourneyResponse, JourneyStepResponse, OrchestrationResponse
+from app.schemas.journey import JourneyStepComplete, JourneyStepTimeLimitUpdate
 from app.orchestration.journey_engine import JourneyEngine
 from app.orchestration.langgraph_supervisor import SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
 from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
+from app.rules.journey_rule_engine import JourneyRuleEngine
 
 router = APIRouter()
 
@@ -132,6 +134,7 @@ def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff
                  "description": step.description,
                  "step_type": step.step_type,
                  "required": step.required,
+                 "owner_role": step.owner_role,
                  "sequence_number": step.sequence_number,
                  "time_limit_hours": step.time_limit_hours,
              }
@@ -144,6 +147,36 @@ def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff
     ]
 
 
+def _check_step_completion_permission(db, journey, step, pathway_step, user):
+    owner_role = step.owner_role or pathway_step.owner_role or "STAFF"
+    if owner_role == "PATIENT":
+        pending_submission = (
+            db.query(PatientEvent)
+            .filter(
+                PatientEvent.journey_id == journey.id,
+                PatientEvent.event_type == "PATIENT_STEP_SUBMITTED",
+                PatientEvent.processed.is_(False),
+                PatientEvent.payload["journey_step_id"].astext == str(step.id),
+            )
+            .first()
+        )
+        if not pending_submission:
+            raise HTTPException(409, "The patient must submit this task before staff can review and complete it.")
+        return owner_role
+
+    allowed_roles = {
+        "CLINICIAN": {"CLINICIAN", "ADMIN"},
+        "CARE_COORDINATOR": {"CARE_COORDINATOR", "ADMIN"},
+        "ADMIN": {"ADMIN"},
+        "STAFF": STAFF_ROLES,
+    }
+    if owner_role == "AGENT":
+        raise HTTPException(409, "Agent-owned steps are completed only after a verified agent action.")
+    if user.role not in allowed_roles.get(owner_role, STAFF_ROLES):
+        raise HTTPException(403, f"This step is assigned to {owner_role.lower().replace('_', ' ')} staff.")
+    return owner_role
+
+
 @router.get("/journeys/{journey_id}", response_model=JourneyResponse)
 def get_journey(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
     journey = get_journey_scoped(journey_id, db, user)
@@ -154,6 +187,84 @@ def get_journey(journey_id: UUID, db: Session = Depends(get_db), user=Depends(re
 def steps(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
     get_journey_scoped(journey_id, db, user)
     return steps_with_pathway_details(db, journey_id)
+
+
+@router.post("/journeys/{journey_id}/steps/{step_id}/complete")
+def complete_journey_step(
+    journey_id: UUID,
+    step_id: UUID,
+    data: JourneyStepComplete,
+    db: Session = Depends(get_db),
+    user=Depends(require_staff),
+):
+    journey = get_journey_scoped(journey_id, db, user)
+    step_row = (
+        db.query(JourneyStep, PathwayStep)
+        .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+        .filter(JourneyStep.id == step_id, JourneyStep.journey_id == journey_id)
+        .with_for_update()
+        .first()
+    )
+    if not step_row:
+        raise HTTPException(404, "Journey step not found")
+    step, pathway_step = step_row
+    if step.status not in {"READY", "IN_PROGRESS"}:
+        raise HTTPException(
+            409,
+            f"Only READY or IN_PROGRESS steps can be completed; this step is {step.status}.",
+        )
+
+    owner_role = _check_step_completion_permission(db, journey, step, pathway_step, user)
+
+    now = datetime.now(timezone.utc)
+    step.status = "COMPLETED"
+    step.completed_at = now
+    step.block_reason = None
+    step.updated_at = now
+    db.add(
+        PatientEvent(
+            id=uuid4(),
+            patient_id=journey.patient_id,
+            journey_id=journey.id,
+            event_type="STEP_COMPLETED",
+            source="carepath-staff-ui",
+            external_event_id=None,
+            event_time=now,
+            payload={
+                "step_code": pathway_step.code,
+                "journey_step_id": str(step.id),
+                "owner_role": owner_role,
+                "step_completed": True,
+                "verified": True,
+                "confirmed_by_user_id": str(user.id),
+                "confirmed_by_role": user.role,
+                "confirmation": "Staff confirmed the step was completed.",
+            },
+            processed=True,
+            created_at=now,
+        )
+    )
+    if owner_role == "PATIENT":
+        for event in (
+            db.query(PatientEvent)
+            .filter(
+                PatientEvent.journey_id == journey.id,
+                PatientEvent.event_type == "PATIENT_STEP_SUBMITTED",
+                PatientEvent.processed.is_(False),
+                PatientEvent.payload["journey_step_id"].astext == str(step.id),
+            )
+            .all()
+        ):
+            event.processed = True
+    JourneyRuleEngine(db).evaluate(journey.id)
+    db.commit()
+    return {
+        "journey_id": str(journey.id),
+        "step_id": str(step.id),
+        "status": step.status,
+        "completed_at": step.completed_at,
+        "steps": steps_with_pathway_details(db, journey.id),
+    }
 
 
 @router.patch("/journeys/{journey_id}/steps/{step_id}/time-limit")
@@ -213,19 +324,21 @@ def orchestration_context(journey_id: UUID, db: Session = Depends(get_db), user=
     return context
 
 
-@router.post("/journeys/{journey_id}/orchestrate")
+@router.post("/journeys/{journey_id}/orchestrate", response_model=OrchestrationResponse)
 def orchestrate(journey_id: UUID, db: Session = Depends(get_db), user=Depends(get_current_user)):
     # Patients can never orchestrate; staff must be in scope for this journey.
     journey = get_journey_for_action(journey_id, db, user, allowed_roles=STAFF_ROLES)
     try:
         result = SupervisorGraph(db).run(journey.id)
-        return {
+        return jsonable_encoder({
             "journey_id": journey.id,
             "status": result.get("status"),
             "decision": result.get("decision"),
             "result": result.get("result"),
+            "outcomes": result.get("outcomes", []),
             "calls": result.get("calls", []),
-        }
+            "run_id": result.get("run_id"),
+        })
     except Exception as exc:
         db.rollback()
         raise HTTPException(502, f"Orchestration failed: {exc}")

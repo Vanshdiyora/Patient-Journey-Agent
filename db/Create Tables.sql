@@ -207,7 +207,11 @@ CREATE TABLE pathway_steps (
 
     required BOOLEAN NOT NULL DEFAULT TRUE,
 
+    owner_role VARCHAR(30) NOT NULL DEFAULT 'STAFF',
+
     due_after_days INTEGER,
+
+    time_limit_hours INTEGER,
 
     completion_criteria JSONB,
 
@@ -230,7 +234,13 @@ CREATE TABLE pathway_steps (
         CHECK (
             due_after_days IS NULL
             OR due_after_days >= 0
-        )
+        ),
+
+    CONSTRAINT chk_pathway_step_owner_role
+        CHECK (owner_role IN ('PATIENT', 'CLINICIAN', 'CARE_COORDINATOR', 'ADMIN', 'STAFF', 'AGENT')),
+
+    CONSTRAINT chk_pathway_step_time_limit_hours
+        CHECK (time_limit_hours IS NULL OR time_limit_hours BETWEEN 1 AND 8760)
 );
 
 
@@ -336,6 +346,10 @@ CREATE TABLE journey_steps (
 
     status journey_step_status NOT NULL DEFAULT 'PENDING',
 
+    owner_role VARCHAR(30) NOT NULL DEFAULT 'STAFF',
+
+    time_limit_hours INTEGER,
+
     due_at TIMESTAMPTZ,
 
     started_at TIMESTAMPTZ,
@@ -364,7 +378,13 @@ CREATE TABLE journey_steps (
         UNIQUE (
             journey_id,
             pathway_step_id
-        )
+        ),
+
+    CONSTRAINT chk_journey_step_owner_role
+        CHECK (owner_role IN ('PATIENT', 'CLINICIAN', 'CARE_COORDINATOR', 'ADMIN', 'STAFF', 'AGENT')),
+
+    CONSTRAINT chk_journey_step_time_limit_hours
+        CHECK (time_limit_hours IS NULL OR time_limit_hours BETWEEN 1 AND 8760)
 );
 
 

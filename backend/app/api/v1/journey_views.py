@@ -1,7 +1,7 @@
 """Journey read models shared by staff and patient endpoints."""
 from sqlalchemy.orm import Session
 
-from app.models import Journey, JourneyStep, Pathway, PathwayStep
+from app.models import Journey, JourneyStep, Pathway, PathwayStep, PatientEvent
 from app.schemas.journey import JourneyResponse, JourneyStepResponse
 
 
@@ -23,13 +23,27 @@ def steps_with_pathway_details(db: Session, journey_id) -> list[dict]:
         .order_by(PathwayStep.sequence_number)
         .all()
     )
+    step_ids = {step.id for step, _template in rows}
+    pending_step_ids = {
+        event.payload.get("journey_step_id")
+        for event in db.query(PatientEvent)
+        .filter(
+            PatientEvent.journey_id == journey_id,
+            PatientEvent.event_type == "PATIENT_STEP_SUBMITTED",
+            PatientEvent.processed.is_(False),
+        )
+        .all()
+        if (event.payload or {}).get("journey_step_id") in {str(step_id) for step_id in step_ids}
+    }
     return [
         {
             **JourneyStepResponse.model_validate(step).model_dump(),
             "name": template.name,
             "description": template.description,
             "sequence_number": template.sequence_number,
+            "owner_role": step.owner_role or template.owner_role or "STAFF",
             "time_limit_hours": step.time_limit_hours,
+            "patient_submission_pending": str(step.id) in pending_step_ids,
         }
         for step, template in rows
     ]

@@ -9,10 +9,11 @@ from .pathway_action_rule import PathwayActionRule
 from .exception_model import ExceptionRecord
 from .agent_run import AgentRun
 from .chat import ChatSession, ChatMessage
+from .chat_audit import ChatAuditLog
 
 __all__ = [
     "User", "Patient", "Pathway", "PathwayStep", "Dependency",
     "Journey", "JourneyStep", "PatientEvent", "ActionExecution",
     "PathwayActionRule", "ExceptionRecord", "AgentRun",
-    "ChatSession", "ChatMessage"
+    "ChatSession", "ChatMessage", "ChatAuditLog"
 ]

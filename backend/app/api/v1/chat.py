@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.authorization import require_admin
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models import User
@@ -130,7 +131,7 @@ def archive_session(
 
 
 # ---------------------------------------------------------------------------
-# Messages (REST fallback for when the WebSocket is unavailable)
+# Messages (REST API for non-WebSocket clients)
 # ---------------------------------------------------------------------------
 
 @router.post("/sessions/{session_id}/messages", status_code=201)
@@ -179,3 +180,35 @@ def reject_action(
         "session": _session_out(result["session"]),
         "message": _message_out(result["message"]),
     }
+
+
+# ---------------------------------------------------------------------------
+# Audit trail (administrator only)
+# ---------------------------------------------------------------------------
+
+def _audit_out(row) -> dict[str, Any]:
+    return {
+        "id": str(row.id),
+        "user_id": str(row.user_id),
+        "conversation_id": str(row.conversation_id) if row.conversation_id else None,
+        "message_id": str(row.message_id) if row.message_id else None,
+        "tool_name": row.tool_name,
+        "event": row.event,
+        "target_entity": row.target_entity,
+        "target_entity_id": row.target_entity_id,
+        "parameters": row.parameters,
+        "permission_result": row.permission_result,
+        "detail": row.detail,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.get("/audit")
+def chat_audit(
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Chatbot activity trail: who proposed/confirmed/executed what, and when."""
+    rows = chat_service.list_audit(db, limit=limit)
+    return {"items": [_audit_out(r) for r in rows]}

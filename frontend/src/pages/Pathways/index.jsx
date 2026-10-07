@@ -1,18 +1,23 @@
 import React, { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { pathwaysApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../../utils";
-import { PageHeading, Panel, ErrorState, EmptyState, Badge } from "../../components";
+import { PageHeading, Panel, ErrorState, EmptyState, Badge, Select } from "../../components";
 import { useToast } from "../../context/ToastContext";
+import PathwayEditDrawer from "./PathwayEditDrawer";
 
 const newStep = (index) => ({
   code: `STEP-${index + 1}`,
   name: "",
   description: "",
   step_type: "FOLLOWUP",
+  owner_role: "CARE_COORDINATOR",
   time_limit_hours: 24,
 });
+
+const OWNER_ROLES = ["PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "STAFF", "AGENT"];
+const OWNER_ROLE_OPTIONS = OWNER_ROLES.map(role => ({ value: role, label: humanize(role) }));
 
 export default function Pathways() {
   const pathways = useAsync(() => pathwaysApi.list(), []);
@@ -25,7 +30,11 @@ export default function Pathways() {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const rows = toList(pathways.data);
+  const [editing, setEditing] = useState(null);
+  const rows = Array.from(toList(pathways.data).reduce((latest, pathway) => {
+    if (!latest.has(pathway.code) || latest.get(pathway.code).version < pathway.version) latest.set(pathway.code, pathway);
+    return latest;
+  }, new Map()).values());
 
   const updateStep = (index, key, value) => {
     setForm(current => ({
@@ -90,13 +99,18 @@ export default function Pathways() {
             className="secondary-btn"
             type="button"
             disabled={busy || form.steps.length >= 100}
-            onClick={() => setForm(current => ({ ...current, steps: [...current.steps, newStep(current.steps.length)] }))}
+            onClick={() => setForm(current => {
+              const codes = new Set(current.steps.map(step => step.code));
+              let suffix = current.steps.length + 1;
+              while (codes.has(`STEP-${suffix}`)) suffix += 1;
+              return { ...current, steps: [...current.steps, { ...newStep(current.steps.length), code: `STEP-${suffix}` }] };
+            })}
           ><Plus size={15} /> Add step</button>
         </div>
 
         <div className="pathway-step-editors">
           {form.steps.map((step, index) => (
-            <section className="pathway-step-editor" key={index}>
+            <section className="pathway-step-editor" key={step.code}>
               <div className="pathway-step-editor-heading">
                 <strong>Step {index + 1}</strong>
                 <button className="icon-btn" type="button" aria-label={`Remove step ${index + 1}`} disabled={busy || form.steps.length === 1} onClick={() => setForm(current => ({ ...current, steps: current.steps.filter((_, i) => i !== index) }))}>
@@ -113,6 +127,16 @@ export default function Pathways() {
                 <label>Step type
                   <input required maxLength="50" value={step.step_type} onChange={event => updateStep(index, "step_type", event.target.value)} placeholder="FOLLOWUP" />
                 </label>
+                <div className="pathway-owner-field">
+                  <span>Responsible role</span>
+                  <Select
+                    label="Responsible role"
+                    value={step.owner_role}
+                    onChange={value => updateStep(index, "owner_role", value)}
+                    options={OWNER_ROLE_OPTIONS}
+                    className="pathway-owner-select"
+                  />
+                </div>
                 <label>Time limit (hours)
                   <input required type="number" min="1" max="8760" value={step.time_limit_hours} onChange={event => updateStep(index, "time_limit_hours", event.target.value)} />
                 </label>
@@ -136,12 +160,15 @@ export default function Pathways() {
               <details className="pathway-list-item" key={pathway.id}>
                 <summary>
                   <span><strong>{pathway.name}</strong><small><code>{pathway.code}</code> · v{pathway.version} · {pathway.steps?.length || 0} steps</small></span>
-                  <Badge kind="status" value={pathway.status} />
+                  <span className="pathway-list-actions">
+                    <Badge kind="status" value={pathway.status} />
+                    {pathway.status === "ACTIVE" && <button className="secondary-btn pathway-edit-btn" type="button" aria-label={`Edit ${pathway.name}`} onClick={event => { event.preventDefault(); setEditing(pathway); }}><Pencil size={14} /> Edit</button>}
+                  </span>
                 </summary>
                 <ol className="pathway-list-steps">
                   {(pathway.steps || []).map(step => (
                     <li key={step.id}>
-                      <span><strong>{step.sequence_number}. {step.name}</strong><small>{step.description || humanize(step.step_type)}{step.required ? " · Required" : " · Optional"}</small></span>
+                      <span><strong>{step.sequence_number}. {step.name}</strong><small>{step.description || humanize(step.step_type)}{step.required ? " · Required" : " · Optional"} · Owner: {humanize(step.owner_role || "STAFF")}</small></span>
                       <span>{step.time_limit_hours} hours</span>
                     </li>
                   ))}
@@ -150,5 +177,6 @@ export default function Pathways() {
             ))}
           </div> : <EmptyState small title="No pathways found" text="Create the first pathway above." />}
     </Panel>
+    {editing && <PathwayEditDrawer key={editing.id} pathway={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); pathways.refetch().catch(() => {}); }} />}
   </div>;
 }

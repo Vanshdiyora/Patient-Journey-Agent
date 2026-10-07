@@ -9,6 +9,8 @@ export const journeysApi = {
   availablePathways: () => get("/api/v1/journeys/available-pathways"),
   get: (id) => get(`/api/v1/journeys/${id}`),
   steps: (id) => get(`/api/v1/journeys/${id}/steps`),
+  completeStep: (journeyId, stepId) =>
+    post(`/api/v1/journeys/${journeyId}/steps/${stepId}/complete`, { confirmed: true }),
   updateStepTimeLimit: (journeyId, stepId, time_limit_hours) =>
     patch(`/api/v1/journeys/${journeyId}/steps/${stepId}/time-limit`, { time_limit_hours }),
   evaluate: (id) => post(`/api/v1/journeys/${id}/evaluate`),

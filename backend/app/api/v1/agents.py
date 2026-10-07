@@ -27,4 +27,6 @@ def agent_runs(
             q = q.join(Journey, Journey.id == AgentRun.journey_id).filter(
                 Journey.patient_id.in_(patient_ids)
             )
-    return q.order_by(AgentRun.started_at.desc()).limit(limit).all()
+    # The orchestration record spans its agent calls, so order by completion
+    # to keep the final outcome ahead of the individual calls it summarizes.
+    return q.order_by(AgentRun.completed_at.desc().nullslast(), AgentRun.started_at.desc()).limit(limit).all()

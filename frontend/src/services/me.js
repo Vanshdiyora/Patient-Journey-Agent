@@ -11,4 +11,6 @@ export const meApi = {
   journeySteps: (id) => get(`/api/v1/me/journeys/${id}/steps`),
   journeyEvents: (id) => get(`/api/v1/me/journeys/${id}/events`),
   submitEvent: (id, payload) => post(`/api/v1/me/journeys/${id}/events`, payload),
+  submitStep: (journeyId, stepId, comment) =>
+    post(`/api/v1/me/journeys/${journeyId}/steps/${stepId}/submit`, { comment }),
 };

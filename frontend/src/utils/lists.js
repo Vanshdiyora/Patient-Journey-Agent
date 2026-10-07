@@ -12,6 +12,8 @@ export const STATUS_STYLES = {
   blocked: "status status--danger",
   open: "status status--danger",
   failed: "status status--danger",
+  wait: "status status--pending",
+  escalate: "status status--danger",
   cancelled: "status status--muted",
   skipped: "status status--muted",
 };

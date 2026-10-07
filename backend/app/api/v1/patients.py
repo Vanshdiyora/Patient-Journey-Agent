@@ -1,14 +1,13 @@
-from datetime import datetime, timedelta, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.authorization import require_staff, scope_patient_ids
-from app.models import Patient, Journey, JourneyStep, Pathway, PathwayStep, ExceptionRecord
+from app.models import Patient, Journey, Pathway, ExceptionRecord
 from app.schemas import PatientResponse, JourneyResponse
 from app.schemas.journey import JourneyCreate
 from app.api.v1.journey_views import journey_with_pathway, journeys_with_pathways
-from app.orchestration.journey_engine import JourneyEngine
+from app.services.journey_service import start_journey_for_patient
 
 router = APIRouter()
 
@@ -118,56 +117,12 @@ def start_patient_journey(
     if not patient or (patient_ids is not None and patient_id not in patient_ids):
         raise HTTPException(404, "Patient not found")
 
-    pathway = db.query(Pathway).filter(Pathway.id == data.pathway_id, Pathway.status == "ACTIVE").first()
-    if not pathway:
-        raise HTTPException(422, "Select an active care pathway")
-
-    existing = db.query(Journey).filter(
-        Journey.patient_id == patient_id,
-        Journey.pathway_id == pathway.id,
-        Journey.status.in_(("ACTIVE", "BLOCKED")),
-    ).first()
-    if existing:
-        raise HTTPException(409, "This patient already has an active journey for this pathway")
-
-    templates = db.query(PathwayStep).filter(PathwayStep.pathway_id == pathway.id).order_by(PathwayStep.sequence_number).all()
-    if not templates:
-        raise HTTPException(422, "This pathway has no care steps")
-
-    now = datetime.now(timezone.utc)
-    overrides = data.step_time_limits_hours
-    template_ids = {step.id for step in templates}
-    if not set(overrides).issubset(template_ids):
-        raise HTTPException(422, "Time-limit overrides must reference steps in the selected pathway")
-    time_limits = {
-        step.id: overrides.get(
-            step.id,
-            step.time_limit_hours
-            if step.time_limit_hours is not None
-            else max(step.due_after_days or 1, 1) * 24,
-        )
-        for step in templates
-    }
-    total_hours = sum(time_limits.values())
-    journey = Journey(
-        id=uuid4(), patient_id=patient_id, pathway_id=pathway.id,
-        pathway_version=pathway.version, status="ACTIVE", priority=data.priority,
-        started_at=now,
-        target_completion_at=now + timedelta(hours=total_hours) if time_limits else None,
-        created_at=now, updated_at=now,
+    # Identical business rules as the chatbot's start_pathway tool: both call
+    # the shared service so neither path can drift from the other.
+    journey = start_journey_for_patient(
+        db, patient_id, data.pathway_id, data.priority, data.step_time_limits_hours
     )
-    db.add(journey)
-    for template in templates:
-        db.add(JourneyStep(
-            id=uuid4(), journey_id=journey.id, pathway_step_id=template.id,
-            status="PENDING",
-            time_limit_hours=time_limits[template.id],
-            due_at=None,
-            started_at=None,
-            created_at=now, updated_at=now,
-        ))
-    db.flush()
-    JourneyEngine(db).evaluate(journey.id)
+    pathway = db.query(Pathway).filter(Pathway.id == data.pathway_id).first()
     db.commit()
     db.refresh(journey)
-    return journey_with_pathway(journey, pathway.name)
+    return journey_with_pathway(journey, pathway.name if pathway else None)
