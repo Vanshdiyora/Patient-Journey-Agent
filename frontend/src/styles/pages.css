@@ -23,6 +23,17 @@
 .patient-identity h1{font:800 25px "Manrope";margin:4px 0 8px}
 .patient-meta{display:flex;align-items:center;gap:14px;color:#71807c;font-size:11px}
 .patient-meta span{display:flex;align-items:center;gap:5px}
+.start-journey-form{padding:16px 18px;border-bottom:1px solid #edf0f0;display:flex;flex-direction:column;gap:11px}
+.start-journey-copy strong{display:block;font-size:12px;color:#394c48}
+.start-journey-copy span,.start-journey-note{display:block;font-size:10px;color:#71807c;margin-top:3px}
+.start-journey-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.start-journey-controls .select-root:first-child{flex:2;min-width:220px}
+.start-journey-controls .select-root:nth-child(2){flex:1;min-width:120px}
+.start-journey-controls .select-trigger{width:100%;min-height:36px}
+.start-journey-controls .primary-btn{min-height:36px;white-space:nowrap}
+.patient-journey-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;border:1px solid var(--line);box-shadow:var(--shadow);border-radius:12px;padding:15px 18px;margin-bottom:16px}
+.patient-journey-summary strong{display:block;font:700 15px "Manrope";margin:4px 0}
+.patient-journey-summary small{display:block;color:#87938f;font-size:10px}
 .detail-list{padding:4px 18px}
 .detail-row{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #edf0f0}
 .detail-row:last-child{border-bottom:0}

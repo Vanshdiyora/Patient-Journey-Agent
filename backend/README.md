@@ -57,6 +57,25 @@ This creates four additional synthetic patients with one journey each and
 matching portal accounts. Their initial password is `Test@123`, stored as a
 bcrypt hash.
 
+## Starting a patient's journey
+
+A patient account is linked to one `patients.id` through `users.patient_id`.
+After login, the patient portal loads `GET /api/v1/me/journeys` and shows the
+journeys for that patient only. A new patient account therefore starts with an
+empty care plan until staff starts a journey.
+
+Staff can open **Patients → patient profile → Start a care journey**, select an
+active pathway and priority, then submit. The backend creates one journey and
+its pathway steps together. The first step starts as `READY`; later steps start
+as `PENDING`, with due dates based on the pathway template. The patient sees
+the pathway name, care steps and progress on **My Journey** after signing in
+or refreshing the portal. Staff cannot start another active journey for the
+same patient and pathway until the existing one is completed or cancelled.
+
+The patient must have a `PATIENT` user account linked to that same patient
+record. Seeded patients already have linked accounts; staff should confirm the
+link when working with imported records.
+
 ## Run
 
 ```powershell
@@ -109,6 +128,9 @@ The agents use this client through `app/llm/provider.py`, so the agent contracts
 - `GET /api/v1/users/me`
 - `GET /api/v1/dashboard/summary`
 - `GET /api/v1/patients`
+- `GET /api/v1/journeys/available-pathways` (staff)
+- `POST /api/v1/patients/{patient_id}/journeys` (staff; `pathway_id`, optional `priority`)
+- `GET /api/v1/me/journeys` (signed-in patient)
 - `GET /api/v1/journeys`
 - `GET /api/v1/journeys/{journey_id}`
 - `GET /api/v1/journeys/{journey_id}/steps`

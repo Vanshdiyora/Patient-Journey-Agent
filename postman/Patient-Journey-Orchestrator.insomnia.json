@@ -1,0 +1,973 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-10-01T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app",
+  "resources": [
+    {
+      "_id": "__WORKSPACE_ID__",
+      "parentId": null,
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "Patient Journey Orchestrator API",
+      "description": "Insomnia-native REST request workspace for the Patient Journey Orchestrator. Configure an active account per role and copy the JWT into the Base Environment token variable after each login.",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "__BASE_ENVIRONMENT_ID__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "Base Environment",
+      "data": {
+        "baseUrl": "http://localhost:8000",
+        "token": "",
+        "password": "Test@123",
+        "patientEmail": "aisha.rahman.0003@patient-demo.example.test",
+        "clinicianEmail": "",
+        "coordinatorEmail": "",
+        "adminEmail": "",
+        "patientJourneyId": "",
+        "patientId": "",
+        "journeyId": "",
+        "exceptionId": "",
+        "userId": "",
+        "chatSessionId": "",
+        "chatMessageId": ""
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "baseUrl",
+          "token",
+          "password",
+          "patientEmail",
+          "clinicianEmail",
+          "coordinatorEmail",
+          "adminEmail",
+          "patientJourneyId",
+          "patientId",
+          "journeyId",
+          "exceptionId",
+          "userId",
+          "chatSessionId",
+          "chatMessageId"
+        ]
+      },
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 1,
+      "_type": "environment"
+    },
+    {
+      "_id": "__folder_1__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "0 â€” Health and authentication",
+      "description": "Login requests return JWTs. Copy access_token into the active environment's token variable before protected calls.",
+      "environment": {},
+      "metaSortKey": -1000000000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "__request_1__",
+      "parentId": "__folder_1__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/health",
+      "name": "Health check",
+      "description": "Expect status=ok and database=connected. No authentication required.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_2__",
+      "parentId": "__folder_1__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/auth/login",
+      "name": "Login â€” Patient",
+      "description": "Send the plain email/password. Copy response.access_token into the Base Environment token variable. Patient demo accounts use Test@123 when properly seeded.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.patientEmail }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -990,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_3__",
+      "parentId": "__folder_1__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/auth/me",
+      "name": "Who am I",
+      "description": "Confirms identity and role for the token currently in the environment.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -980,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__folder_2__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "1 â€” Patient portal",
+      "description": "Run patient login first. Capture patientJourneyId from GET /me/journeys and paste it into the environment.",
+      "environment": {},
+      "metaSortKey": -900000000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "__request_4__",
+      "parentId": "__folder_2__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/me",
+      "name": "Get my profile",
+      "description": "Patient only; profile is resolved from authenticated account.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -900,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_5__",
+      "parentId": "__folder_2__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/me/journeys",
+      "name": "List my journeys",
+      "description": "Copy the first journey id into patientJourneyId.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -890,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_6__",
+      "parentId": "__folder_2__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}",
+      "name": "Get my journey",
+      "description": "Patient-scoped journey read.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -880,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_7__",
+      "parentId": "__folder_2__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}/steps",
+      "name": "Get my journey steps",
+      "description": "Patient-scoped step read.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -870,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_8__",
+      "parentId": "__folder_2__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}/events",
+      "name": "Get my journey events",
+      "description": "Patient-scoped event read.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -860,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_9__",
+      "parentId": "__folder_2__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}/events",
+      "name": "Submit patient update (writes event)",
+      "description": "Creates an unverified patient-portal event. Does not complete steps or trigger agents.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"event_type\": \"GENERAL_UPDATE\",\n  \"payload\": { \"comment\": \"Insomnia end-to-end test update\" }\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -850,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__folder_3__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "2 â€” Staff journeys and orchestration",
+      "description": "Login as clinician/coordinator/admin before running staff endpoints. After listing patients and journeys, copy patientId and journeyId into environment.",
+      "environment": {},
+      "metaSortKey": -800000000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "__request_10__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/auth/login",
+      "name": "Login â€” Clinician",
+      "description": "Configure clinicianEmail to an active CLINICIAN account. Copy access_token into environment token.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.clinicianEmail }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -800,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_11__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/dashboard/summary",
+      "name": "Staff dashboard",
+      "description": "Role-scoped metrics.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -790,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_12__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/patients?search=Aisha&limit=50",
+      "name": "Find demo patient (search Aisha)",
+      "description": "Directory search is by patient name/reference. Copy returned patient id into patientId.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -780,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_13__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/patients/{{ _.patientId }}/journeys",
+      "name": "List patient journeys",
+      "description": "Copy a journey id from the response into journeyId.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -770,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_14__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}",
+      "name": "Get journey",
+      "description": "Journey detail.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -760,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_15__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/steps",
+      "name": "Get journey steps",
+      "description": "Ordered journey steps.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -750,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_16__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/evaluate",
+      "name": "Evaluate journey (deterministic; mutates step/journey statuses)",
+      "description": "Runs dependency/deadline rules only; it does not invoke the LLM agents.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -740,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_17__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/orchestration-context",
+      "name": "Get orchestration context",
+      "description": "Builds current deterministic context and may update journey/step state.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -730,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_18__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/orchestrate",
+      "name": "Orchestrate journey (agents; may execute mock action)",
+      "description": "Supervisor/agent workflow; requires reachable MAQ AI and API key. Response contains status, decision, result, calls. May record agent runs/action execution.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -720,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_19__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/events",
+      "name": "List journey events",
+      "description": "Staff event history.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -710,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_20__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/events",
+      "name": "Add staff event (writes event; not verified)",
+      "description": "Creates and processes event; request cannot set verified evidence.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"event_type\": \"GENERAL_UPDATE\",\n  \"source\": \"insomnia-staff-test\",\n  \"event_time\": \"2026-10-01T10:00:00Z\",\n  \"payload\": { \"comment\": \"Staff API test event\" }\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -700,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_21__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/exceptions?limit=100",
+      "name": "List exceptions",
+      "description": "Copy an exception id into exceptionId if you intend to resolve a demo exception.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -690,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_22__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/actions/registry",
+      "name": "List registered actions",
+      "description": "Staff-visible action allowlist.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -680,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_23__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/actions",
+      "name": "List journey action executions",
+      "description": "Persisted actions for the selected journey.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -670,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_24__",
+      "parentId": "__folder_3__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/agent-runs?journey_id={{ _.journeyId }}&limit=100",
+      "name": "List agent runs",
+      "description": "Review persisted supervisor and sub-agent records.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -660,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__folder_4__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "3 â€” Exceptions and RBAC",
+      "description": "Optional mutations and role-denial checks.",
+      "environment": {},
+      "metaSortKey": -700000000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "__request_25__",
+      "parentId": "__folder_4__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/exceptions/{{ _.exceptionId }}",
+      "name": "Resolve exception (mutates status)",
+      "description": "Only run against a demo exception. Resolution does not remove the clinical blocker.",
+      "method": "PATCH",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"RESOLVED\",\n  \"recommended_action\": \"Reviewed in Insomnia test\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -600,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_26__",
+      "parentId": "__folder_4__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/journeys",
+      "name": "RBAC check â€” patient should get 403",
+      "description": "First log in as patient, set its token, then call this staff-only endpoint; expected response is 403.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -590,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__folder_5__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "4 â€” Admin user management",
+      "description": "Set token using an ADMIN account before running. PATCH calls change real user state; only use a safe test account and restore changes.",
+      "environment": {},
+      "metaSortKey": -600000000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "__request_27__",
+      "parentId": "__folder_5__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/auth/login",
+      "name": "Login â€” Admin",
+      "description": "Configure adminEmail to an active ADMIN. Copy access_token into environment token.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.adminEmail }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -500,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_28__",
+      "parentId": "__folder_5__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/admin/users?limit=100&offset=0",
+      "name": "List users",
+      "description": "Admin-only user directory.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -490,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_29__",
+      "parentId": "__folder_5__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/admin/users/{{ _.userId }}/role",
+      "name": "Change user role (mutates; restore after test)",
+      "description": "Only use on safe test user. Role must be ADMIN, CLINICIAN, CARE_COORDINATOR, or PATIENT; PATIENT requires a linked patient.",
+      "method": "PATCH",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"role\": \"CLINICIAN\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -480,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__folder_6__",
+      "parentId": "__WORKSPACE_ID__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "name": "5 â€” Chat assistant (optional; LLM required)",
+      "description": "Chat uses the same JWT and configured MAQ AI provider. Inspect pending_action before confirming any proposed mutation.",
+      "environment": {},
+      "metaSortKey": -500000000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "__request_30__",
+      "parentId": "__folder_6__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/chat/sessions",
+      "name": "Create chat session",
+      "description": "Copy response id into chatSessionId.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"title\": \"Insomnia API test\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -400,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_31__",
+      "parentId": "__folder_6__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/chat/sessions/{{ _.chatSessionId }}/messages",
+      "name": "Send chat message (LLM required)",
+      "description": "May propose a pending action. Copy assistant_message.id to chatMessageId, then explicitly run Confirm or Reject.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"content\": \"Summarize this journey: {{ _.journeyId }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -390,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    },
+    {
+      "_id": "__request_32__",
+      "parentId": "__folder_6__",
+      "modified": 1790812800000,
+      "created": 1790812800000,
+      "url": "{{ _.baseUrl }}/api/v1/chat/sessions/{{ _.chatSessionId }}/messages",
+      "name": "List chat messages",
+      "description": "Read messages for this account-owned session.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "metaSortKey": -380,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "_type": "request"
+    }
+  ]
+}

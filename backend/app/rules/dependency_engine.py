@@ -10,7 +10,7 @@ class DependencyEngine:
         deps = self.db.query(Dependency).filter(Dependency.target_step_id == target_step_id).all()
         results = []
         for dep in deps:
-            source = self.db.query(JourneyStep).filter(JourneyStep.id == dep.source_step_id, JourneyStep.journey_id == journey_id).first()
+            source = self.db.query(JourneyStep).filter(JourneyStep.pathway_step_id == dep.source_step_id, JourneyStep.journey_id == journey_id).first()
             if not source:
                 results.append({"dependency_id": str(dep.id), "satisfied": False, "blocking": dep.blocking, "reason": "Source step is not present in journey"})
                 continue

@@ -6,6 +6,7 @@ import { get, post } from "./client";
  */
 export const journeysApi = {
   list: (params) => get("/api/v1/journeys", params),
+  availablePathways: () => get("/api/v1/journeys/available-pathways"),
   get: (id) => get(`/api/v1/journeys/${id}`),
   steps: (id) => get(`/api/v1/journeys/${id}/steps`),
   evaluate: (id) => post(`/api/v1/journeys/${id}/evaluate`),

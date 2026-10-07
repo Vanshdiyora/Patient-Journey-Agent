@@ -3,9 +3,9 @@ import { Activity, HeartPulse, ListChecks, Send } from "lucide-react";
 import { meApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { useTabs } from "../../hooks/useTabs";
-import { getErrorMessage, toList } from "../../utils";
+import { formatDate, getErrorMessage, toList } from "../../utils";
 import { useAuth } from "../../context/AuthContext";
-import { EmptyState, Panel, TabBar } from "../../components";
+import { Badge, EmptyState, Panel, TabBar } from "../../components";
 import JourneyMetrics from "./JourneyMetrics";
 import CarePlanPanel from "./CarePlanPanel";
 import UpdatesPanel from "./UpdatesPanel";
@@ -49,11 +49,12 @@ export default function MyJourney() {
   const rows = toList(journeys.data, "items");
   const [selectedId, setSelectedId] = React.useState(null);
   const currentId = selectedId || rows[0]?.id || null;
+  const currentJourney = rows.find(j => j.id === currentId);
   const steps = useAsync(() => (currentId ? meApi.journeySteps(currentId) : Promise.resolve([])), [currentId]);
   const events = useAsync(() => (currentId ? meApi.journeyEvents(currentId) : Promise.resolve([])), [currentId]);
   const stepRows = toList(steps.data);
   const eventRows = toList(events.data);
-  const done = stepRows.filter(s => ["COMPLETED", "RESOLVED"].includes(String(s.status).toLowerCase())).length;
+  const done = stepRows.filter(s => ["COMPLETED", "RESOLVED"].includes(String(s.status).toUpperCase())).length;
 
   if (journeys.loading) return <div className="skeleton-detail"><i /><i /><i /></div>;
   if (journeys.error) return <div className="empty-state"><strong>Could not load your journey</strong><span>{getErrorMessage(journeys.error)}</span></div>;
@@ -62,7 +63,7 @@ export default function MyJourney() {
     return <EmptyState icon={HeartPulse} title="No active journey" text="Your care team has not started a journey for you yet." />;
   }
 
-  const nextStep = stepRows.find(s => !["COMPLETED", "RESOLVED", "CANCELLED"].includes(String(s.status).toLowerCase()));
+  const nextStep = stepRows.find(s => !["COMPLETED", "RESOLVED", "CANCELLED"].includes(String(s.status).toUpperCase()));
 
   return <div>
     <div className="page-heading">
@@ -71,6 +72,11 @@ export default function MyJourney() {
         <h1>Hello, {user?.name || user?.email?.split("@")[0]}</h1>
         <p>Follow your care plan and send updates to your care team.</p>
       </div>
+    </div>
+
+    <div className="patient-journey-summary">
+      <div><span className="eyebrow">Current care journey</span><strong>{currentJourney?.pathway_name || "Care journey"}</strong><small>Started {formatDate(currentJourney?.started_at)}</small></div>
+      <Badge kind="status" value={currentJourney?.status} />
     </div>
 
     <TabBar

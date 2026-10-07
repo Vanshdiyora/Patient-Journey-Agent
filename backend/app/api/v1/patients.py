@@ -1,10 +1,13 @@
-from uuid import UUID
+from datetime import datetime, timedelta, timezone
+from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.authorization import require_staff, can_read_journey, scope_patient_ids
-from app.models import Patient, Journey, ExceptionRecord
+from app.core.authorization import require_staff, scope_patient_ids
+from app.models import Patient, Journey, JourneyStep, Pathway, PathwayStep, ExceptionRecord
 from app.schemas import PatientResponse, JourneyResponse
+from app.schemas.journey import JourneyCreate
+from app.api.v1.journey_views import journey_with_pathway, journeys_with_pathways
 
 router = APIRouter()
 
@@ -91,9 +94,63 @@ def patient_journeys(patient_id: UUID, db: Session = Depends(get_db), user=Depen
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None and patient_id not in patient_ids:
         raise HTTPException(404, "Patient not found")
-    return (
+    journeys = (
         db.query(Journey)
         .filter(Journey.patient_id == patient_id)
         .order_by(Journey.started_at.desc())
         .all()
     )
+    return journeys_with_pathways(db, journeys)
+
+
+@router.post("/patients/{patient_id}/journeys", response_model=JourneyResponse, status_code=201)
+def start_patient_journey(
+    patient_id: UUID,
+    data: JourneyCreate,
+    db: Session = Depends(get_db),
+    user=Depends(require_staff),
+):
+    # Lock the patient row so two staff requests cannot start the same active
+    # pathway for this patient at the same time.
+    patient = db.query(Patient).filter(Patient.id == patient_id).with_for_update().first()
+    patient_ids = scope_patient_ids(db, user)
+    if not patient or (patient_ids is not None and patient_id not in patient_ids):
+        raise HTTPException(404, "Patient not found")
+
+    pathway = db.query(Pathway).filter(Pathway.id == data.pathway_id, Pathway.status == "ACTIVE").first()
+    if not pathway:
+        raise HTTPException(422, "Select an active care pathway")
+
+    existing = db.query(Journey).filter(
+        Journey.patient_id == patient_id,
+        Journey.pathway_id == pathway.id,
+        Journey.status.in_(("ACTIVE", "BLOCKED")),
+    ).first()
+    if existing:
+        raise HTTPException(409, "This patient already has an active journey for this pathway")
+
+    templates = db.query(PathwayStep).filter(PathwayStep.pathway_id == pathway.id).order_by(PathwayStep.sequence_number).all()
+    if not templates:
+        raise HTTPException(422, "This pathway has no care steps")
+
+    now = datetime.now(timezone.utc)
+    due_days = [step.due_after_days for step in templates if step.due_after_days is not None]
+    journey = Journey(
+        id=uuid4(), patient_id=patient_id, pathway_id=pathway.id,
+        pathway_version=pathway.version, status="ACTIVE", priority=data.priority,
+        started_at=now,
+        target_completion_at=now + timedelta(days=max(due_days)) if due_days else None,
+        created_at=now, updated_at=now,
+    )
+    db.add(journey)
+    for index, template in enumerate(templates):
+        db.add(JourneyStep(
+            id=uuid4(), journey_id=journey.id, pathway_step_id=template.id,
+            status="READY" if index == 0 else "PENDING",
+            due_at=now + timedelta(days=template.due_after_days) if template.due_after_days is not None else None,
+            started_at=now if index == 0 else None,
+            created_at=now, updated_at=now,
+        ))
+    db.commit()
+    db.refresh(journey)
+    return journey_with_pathway(journey, pathway.name)

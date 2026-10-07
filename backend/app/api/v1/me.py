@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.authorization import get_owned_patient, require_patient
-from app.models import Journey, JourneyStep, Patient, PatientEvent
+from app.models import Journey, Patient, PatientEvent
 from app.schemas.patient_event import (
     PATIENT_EVENT_TYPES,
     PATIENT_PAYLOAD_KEYS,
@@ -22,6 +22,7 @@ from app.schemas.patient_event import (
     PatientEventResponse,
 )
 from app.schemas import JourneyResponse, JourneyStepResponse
+from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
 
 router = APIRouter(prefix="/me", tags=["patient"])
 
@@ -55,28 +56,25 @@ def my_profile(user=Depends(require_patient), db: Session = Depends(get_db)):
 @router.get("/journeys", response_model=list[JourneyResponse])
 def my_journeys(user=Depends(require_patient), db: Session = Depends(get_db)):
     patient_id = get_owned_patient(user)
-    return (
+    journeys = (
         db.query(Journey)
         .filter(Journey.patient_id == patient_id)
         .order_by(Journey.started_at.desc())
         .all()
     )
+    return journeys_with_pathways(db, journeys)
 
 
 @router.get("/journeys/{journey_id}", response_model=JourneyResponse)
 def my_journey(journey_id: UUID, user=Depends(require_patient), db: Session = Depends(get_db)):
-    return _own_journey(journey_id, db, get_owned_patient(user))
+    journey = _own_journey(journey_id, db, get_owned_patient(user))
+    return journeys_with_pathways(db, [journey])[0]
 
 
 @router.get("/journeys/{journey_id}/steps", response_model=list[JourneyStepResponse])
 def my_journey_steps(journey_id: UUID, user=Depends(require_patient), db: Session = Depends(get_db)):
     journey = _own_journey(journey_id, db, get_owned_patient(user))
-    return (
-        db.query(JourneyStep)
-        .filter(JourneyStep.journey_id == journey.id)
-        .order_by(JourneyStep.due_at)
-        .all()
-    )
+    return steps_with_pathway_details(db, journey.id)
 
 
 @router.get("/journeys/{journey_id}/events", response_model=list[PatientEventResponse])

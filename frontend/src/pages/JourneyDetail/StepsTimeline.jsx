@@ -15,8 +15,8 @@ export default function StepsTimeline({ steps }) {
           {COMPLETED_STATES.includes(String(s.status).toLowerCase()) ? <CheckCircle2 size={17} /> : i === 0 ? <Play size={15} /> : <Clock3 size={16} />}
         </div>
         <div className="timeline-content">
-          <div className="timeline-top"><strong>Step {i + 1}</strong><Badge kind="status" value={s.status} /></div>
-          <span className="timeline-sub">{s.pathway_step_id}</span>
+          <div className="timeline-top"><strong>{s.name || `Step ${i + 1}`}</strong><Badge kind="status" value={s.status} /></div>
+          {s.description && <span className="timeline-sub">{s.description}</span>}
           {s.block_reason && <div className="block-note"><AlertTriangle size={14} />{s.block_reason}</div>}
           <div className="timeline-dates">
             {s.started_at && <span>Started {formatDate(s.started_at, true)}</span>}

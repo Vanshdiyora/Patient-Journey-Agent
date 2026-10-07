@@ -1,0 +1,179 @@
+{
+  "info": {
+    "_postman_id": "53c0768a-38a9-48ca-a6fb-c6bf74ab2293",
+    "name": "Patient Journey Orchestrator API — End-to-End",
+    "description": "Role-based API walkthrough for patient, clinician/care coordinator, admin, journey evaluation, agent orchestration, exceptions, events, and audit. Import this collection and configure the collection variables before running. Mutating requests are marked in their descriptions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "patientEmail", "value": "aisha.rahman.0003@patient-demo.example.test", "type": "string" },
+    { "key": "clinicianEmail", "value": "", "type": "string" },
+    { "key": "coordinatorEmail", "value": "", "type": "string" },
+    { "key": "adminEmail", "value": "", "type": "string" },
+    { "key": "password", "value": "Test@123", "type": "string" },
+    { "key": "patientJourneyId", "value": "", "type": "string" },
+    { "key": "journeyId", "value": "", "type": "string" },
+    { "key": "patientId", "value": "", "type": "string" },
+    { "key": "exceptionId", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" },
+    { "key": "chatSessionId", "value": "", "type": "string" },
+    { "key": "chatMessageId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "0 — Health and authentication",
+      "item": [
+        {
+          "name": "Health check (no auth)",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/health", "description": "Expect status=ok and database=connected." }
+        },
+        {
+          "name": "Login — Patient",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', () => pm.response.to.have.status(200));", "const body = pm.response.json();", "pm.collectionVariables.set('token', body.access_token);", "pm.collectionVariables.set('patientId', body.user && body.user.patient_id ? body.user.patient_id : '');"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{patientEmail}}\",\n  \"password\": \"{{password}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/login", "description": "Enter the seeded patient email as plain text (no mailto/Markdown). Stores the returned JWT in collection variable token." }
+        },
+        {
+          "name": "Who am I (patient token)",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/auth/me", "description": "Confirms authenticated email and role." }
+        }
+      ]
+    },
+    {
+      "name": "1 — Patient self-service",
+      "item": [
+        { "name": "Get my patient profile", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/me" } },
+        {
+          "name": "List my journeys (captures first journey ID)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Patient journeys loaded', () => pm.response.to.have.status(200));", "const rows = pm.response.json();", "if (Array.isArray(rows) && rows.length) pm.collectionVariables.set('patientJourneyId', rows[0].id);"] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/me/journeys", "description": "Run before the patient journey detail requests. Stores the first journey ID automatically." }
+        },
+        { "name": "Get my journey", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/me/journeys/{{patientJourneyId}}" } },
+        { "name": "Get my journey steps", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/me/journeys/{{patientJourneyId}}/steps" } },
+        { "name": "Get my journey events", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/me/journeys/{{patientJourneyId}}/events" } },
+        {
+          "name": "Submit patient update (writes event)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"event_type\": \"GENERAL_UPDATE\",\n  \"payload\": {\n    \"comment\": \"Postman end-to-end test update\"\n  }\n}" }, "url": "{{baseUrl}}/api/v1/me/journeys/{{patientJourneyId}}/events", "description": "Mutates data: creates an unverified patient-portal event. It does not complete a step or trigger journey agents." }
+        },
+        {
+          "name": "Patient cannot access staff journey list (expect 403)",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys", "description": "RBAC check; expected 403 because current token is a patient token." }
+        }
+      ]
+    },
+    {
+      "name": "2 — Staff workflow (Clinician or Care Coordinator)",
+      "description": "Login with an active staff account. Re-login in the Staff login request to replace the patient token.",
+      "item": [
+        {
+          "name": "Login — Clinician",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', () => pm.response.to.have.status(200));", "pm.collectionVariables.set('token', pm.response.json().access_token);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{clinicianEmail}}\",\n  \"password\": \"{{password}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/login", "description": "Set clinicianEmail to an active CLINICIAN account from your seeded users." }
+        },
+        { "name": "Who am I (staff)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/auth/me" } },
+        { "name": "Staff dashboard summary", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/dashboard/summary" } },
+        {
+          "name": "List patients (search Aisha)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const rows = pm.response.json().items || [];", "const match = rows.find(p => `${p.first_name} ${p.last_name}`.toLowerCase().includes('aisha'));", "if (match) pm.collectionVariables.set('patientId', match.id);"] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/patients?search=Aisha&limit=50" }
+        },
+        { "name": "Get patient record", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/patients/{{patientId}}" } },
+        {
+          "name": "List this patient's journeys (captures journey ID)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const rows = pm.response.json();", "if (Array.isArray(rows) && rows.length) pm.collectionVariables.set('journeyId', rows[0].id);"] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/patients/{{patientId}}/journeys" }
+        },
+        { "name": "List journeys", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys?limit=50&offset=0" } },
+        { "name": "Get journey detail", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}" } },
+        { "name": "Get journey steps", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/steps" } },
+        { "name": "Get orchestration context", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/orchestration-context", "description": "Recomputes deterministic state while building context; may update journey/step statuses." } },
+        {
+          "name": "Evaluate journey (mutates deterministic statuses)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/evaluate", "description": "Runs dependency and deadline rules. This does not invoke the LLM agents." }
+        },
+        {
+          "name": "Orchestrate journey (may execute mock action; LLM required)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/orchestrate", "description": "Mutating/agent request: Supervisor may call Journey Intelligence or Coordination and execute a registry-approved mock action. Requires MAQ_AI_ENABLED=true and a valid MAQ_AI_API_KEY. Can return 502 if LLM/orchestration fails." }
+        },
+        { "name": "List journey events", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/events?limit=100" } },
+        {
+          "name": "Add staff event (writes event; verified=false by default)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"event_type\": \"GENERAL_UPDATE\",\n  \"source\": \"postman-staff-test\",\n  \"event_time\": \"{{$isoTimestamp}}\",\n  \"payload\": {\n    \"comment\": \"Staff API test event\"\n  }\n}" }, "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/events", "description": "Mutates data and runs event processing/evaluation. The request cannot mark the event verified; it will not complete a step by itself." }
+        },
+        {
+          "name": "List exceptions (captures first exception ID)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const rows = pm.response.json();", "if (Array.isArray(rows) && rows.length) pm.collectionVariables.set('exceptionId', rows[0].id);"] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/exceptions?limit=100" }
+        },
+        { "name": "Resolve exception (writes status)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"RESOLVED\",\n  \"recommended_action\": \"Reviewed during Postman end-to-end test\"\n}" }, "url": "{{baseUrl}}/api/v1/exceptions/{{exceptionId}}", "description": "Mutates exception status. Use a demo exception; this does not remove the underlying clinical blocker." } },
+        { "name": "Get action registry", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/actions/registry" } },
+        { "name": "Get journey action executions", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/actions" } },
+        { "name": "Get agent runs for journey", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/agent-runs?journey_id={{journeyId}}&limit=100" } },
+        { "name": "Get recent agent runs", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/agent-runs?limit=100" } },
+        { "name": "Clinician cannot access admin users (expect 403)", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/admin/users", "description": "RBAC check; expected 403 for clinician/coordinator." } }
+      ]
+    },
+    {
+      "name": "3 — Care Coordinator role (optional role switch)",
+      "item": [
+        {
+          "name": "Login — Care Coordinator",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', () => pm.response.to.have.status(200));", "pm.collectionVariables.set('token', pm.response.json().access_token);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{coordinatorEmail}}\",\n  \"password\": \"{{password}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/login" }
+        },
+        { "name": "Coordinator dashboard", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/dashboard/summary" } },
+        { "name": "Find blocked patients", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/patients?filter=blocked&limit=50" } },
+        { "name": "Find patients with follow-up exceptions", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/patients?filter=has_exceptions&limit=50" } },
+        { "name": "Review exceptions", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/exceptions?status=OPEN&limit=100" } },
+        { "name": "Run orchestration on chosen journey", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": "{{baseUrl}}/api/v1/journeys/{{journeyId}}/orchestrate", "description": "Optional; may execute a mock coordination action. Requires configured MAQ AI." } }
+      ]
+    },
+    {
+      "name": "4 — Admin (optional; writes role/status changes)",
+      "item": [
+        {
+          "name": "Login — Admin",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login succeeded', () => pm.response.to.have.status(200));", "pm.collectionVariables.set('token', pm.response.json().access_token);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{password}}\"\n}" }, "url": "{{baseUrl}}/api/v1/auth/login" }
+        },
+        {
+          "name": "List users (captures first user ID)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const rows = pm.response.json().items || [];", "if (rows.length) pm.collectionVariables.set('userId', rows[0].id);"] } }],
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/admin/users?limit=100&offset=0" }
+        },
+        { "name": "Search users", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/admin/users?search={{clinicianEmail}}&limit=50" } },
+        { "name": "Change user role (writes; restore after test)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"role\": \"CLINICIAN\"\n}" }, "url": "{{baseUrl}}/api/v1/admin/users/{{userId}}/role", "description": "Changes role. Point userId at a safe test identity and restore its original role after testing." } },
+        { "name": "Deactivate/reactivate user (writes; avoid your only admin)", "request": { "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"is_active\": false\n}" }, "url": "{{baseUrl}}/api/v1/admin/users/{{userId}}/status", "description": "Mutates login access. Use a disposable test account; set is_active=true to restore." } }
+      ]
+    },
+    {
+      "name": "5 — Optional chat assistant (REST; LLM required)",
+      "item": [
+        {
+          "name": "Create chat session (captures session ID)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) pm.collectionVariables.set('chatSessionId', pm.response.json().id);"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"title\": \"Postman API test\"\n}" }, "url": "{{baseUrl}}/api/v1/chat/sessions" }
+        },
+        { "name": "List chat sessions", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/chat/sessions" } },
+        {
+          "name": "Send chat message (LLM required; captures assistant message ID)",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) { const body = pm.response.json(); pm.collectionVariables.set('chatMessageId', body.assistant_message.id); }"] } }],
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"content\": \"Summarize this journey: {{journeyId}}\"\n}" }, "url": "{{baseUrl}}/api/v1/chat/sessions/{{chatSessionId}}/messages", "description": "May return a pending_action proposal. Inspect the assistant response before choosing the Confirm or Reject request below." }
+        },
+        { "name": "Get chat messages", "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/v1/chat/sessions/{{chatSessionId}}/messages" } },
+        { "name": "Confirm proposed chat action (mutates; only run after review)", "request": { "method": "POST", "header": [], "url": "{{baseUrl}}/api/v1/chat/sessions/{{chatSessionId}}/messages/{{chatMessageId}}/confirm", "description": "Executes a pending mutating tool proposal after explicit confirmation. Do not run unless you reviewed and intend to approve that action." } },
+        { "name": "Reject proposed chat action", "request": { "method": "POST", "header": [], "url": "{{baseUrl}}/api/v1/chat/sessions/{{chatSessionId}}/messages/{{chatMessageId}}/reject" }
+        }
+      ]
+    },
+    {
+      "name": "6 — Optional chat WebSocket",
+      "description": "Connect a Postman WebSocket request to ws://localhost:8000/ws/chat?token={{token}}. Send JSON text frames such as {\"type\":\"ping\"} or {\"type\":\"message\",\"content\":\"Summarize journey {{journeyId}}\"}. Chat uses the same LLM provider configuration."
+    }
+  ]
+}

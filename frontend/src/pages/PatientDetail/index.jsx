@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Network, UserRound } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import { patientsApi } from "../../services";
+import { journeysApi, patientsApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
-import { formatDate, initials, humanize, toList } from "../../utils";
-import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton } from "../../components";
+import { formatDate, getErrorMessage, initials, humanize, toList } from "../../utils";
+import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton, Select } from "../../components";
+import { useToast } from "../../context/ToastContext";
 
 function Detail({ label, value }) {
   return <div className="detail-row"><span>{label}</span><strong>{value || "—"}</strong></div>;
@@ -14,8 +15,32 @@ export default function PatientDetail() {
   const { patientId } = useParams();
   const patient = useAsync(() => patientsApi.get(patientId), [patientId]);
   const journeys = useAsync(() => patientsApi.journeys(patientId), [patientId]);
+  const pathways = useAsync(() => journeysApi.availablePathways(), []);
+  const toast = useToast();
+  const [pathwayId, setPathwayId] = useState("");
+  const [priority, setPriority] = useState("MEDIUM");
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
   const p = patient.data;
   const js = toList(journeys.data, "items");
+  const pathwayRows = toList(pathways.data);
+
+  const startJourney = async (event) => {
+    event.preventDefault();
+    if (!pathwayId || busy) return;
+    setBusy(true);
+    setFormError("");
+    try {
+      await patientsApi.startJourney(patientId, { pathway_id: pathwayId, priority });
+      await journeys.refetch();
+      setPathwayId("");
+      toast.success("Care journey started. The patient can now see it after signing in or refreshing their portal.");
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (patient.loading) return <DetailSkeleton />;
   if (patient.error) return <ErrorState error={patient.error} title="Could not load patient" />;
@@ -37,6 +62,17 @@ export default function PatientDetail() {
 
     <div className="content-grid">
       <Panel wide title="Care journeys" subtitle="Pathways associated with this patient">
+        <form className="start-journey-form" onSubmit={startJourney}>
+          <div className="start-journey-copy"><strong>Start a care journey</strong><span>Choose an active pathway to add its steps to this patient's portal.</span></div>
+          {pathways.error ? <div className="event-form-error">Could not load pathways: {getErrorMessage(pathways.error)}</div> :
+            pathwayRows.length ? <div className="start-journey-controls">
+              <Select value={pathwayId} onChange={setPathwayId} label="Care pathway" placeholder="Choose pathway" options={pathwayRows.map(w => ({ value: w.id, label: `${w.name} (v${w.version})` }))} disabled={busy} />
+              <Select value={priority} onChange={setPriority} label="Priority" options={["LOW", "MEDIUM", "HIGH", "CRITICAL"].map(value => ({ value, label: humanize(value) }))} disabled={busy} />
+              <button className="primary-btn" type="submit" disabled={!pathwayId || busy}>{busy ? "Starting…" : "Start journey"}</button>
+            </div> : <span className="start-journey-note">{pathways.loading ? "Loading pathways…" : "No active pathways are available."}</span>}
+          {formError && <div className="event-form-error" role="alert">{formError}</div>}
+        </form>
+        {journeys.error && <ErrorState error={journeys.error} title="Could not load journeys" />}
         {js.length ? (
           <div className="journey-list">{js.map(j => (
             <Link className="journey-card" key={j.id} to={`/journeys/${j.id}`}>

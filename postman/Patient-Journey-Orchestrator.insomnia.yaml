@@ -1,0 +1,642 @@
+type: collection.insomnia.rest/5.0
+schema_version: '5.1'
+name: Patient Journey Orchestrator API
+meta:
+  id: wrk_patient_journey_orchestrator
+  description: Insomnia-native REST request workspace for the Patient Journey Orchestrator. Configure an active account per
+    role and copy the JWT into the Base Environment token variable after each login.
+collection:
+- name: 0 â€” Health and authentication
+  description: Login requests return JWTs. Copy access_token into the active environment's token variable before protected
+    calls.
+  meta:
+    id: fld_folder_1
+  children:
+  - name: Health check
+    url: '{{ _.baseUrl }}/api/v1/health'
+    method: GET
+    headers: []
+    parameters: []
+    authentication: {}
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_1
+    description: Expect status=ok and database=connected. No authentication required.
+  - name: Login â€” Patient
+    url: '{{ _.baseUrl }}/api/v1/auth/login'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication: {}
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_2
+    description: Send the plain email/password. Copy response.access_token into the Base Environment token variable. Patient
+      demo accounts use Test@123 when properly seeded.
+    body:
+      mimeType: application/json
+      text: "{\n  \"email\": \"{{ _.patientEmail }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+  - name: Who am I
+    url: '{{ _.baseUrl }}/api/v1/auth/me'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_3
+    description: Confirms identity and role for the token currently in the environment.
+- name: 1 â€” Patient portal
+  description: Run patient login first. Capture patientJourneyId from GET /me/journeys and paste it into the environment.
+  meta:
+    id: fld_folder_2
+  children:
+  - name: Get my profile
+    url: '{{ _.baseUrl }}/api/v1/me'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_4
+    description: Patient only; profile is resolved from authenticated account.
+  - name: List my journeys
+    url: '{{ _.baseUrl }}/api/v1/me/journeys'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_5
+    description: Copy the first journey id into patientJourneyId.
+  - name: Get my journey
+    url: '{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_6
+    description: Patient-scoped journey read.
+  - name: Get my journey steps
+    url: '{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}/steps'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_7
+    description: Patient-scoped step read.
+  - name: Get my journey events
+    url: '{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}/events'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_8
+    description: Patient-scoped event read.
+  - name: Submit patient update (writes event)
+    url: '{{ _.baseUrl }}/api/v1/me/journeys/{{ _.patientJourneyId }}/events'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_9
+    description: Creates an unverified patient-portal event. Does not complete steps or trigger agents.
+    body:
+      mimeType: application/json
+      text: "{\n  \"event_type\": \"GENERAL_UPDATE\",\n  \"payload\": { \"comment\": \"Insomnia end-to-end test update\" }\n\
+        }"
+- name: 2 â€” Staff journeys and orchestration
+  description: Login as clinician/coordinator/admin before running staff endpoints. After listing patients and journeys, copy
+    patientId and journeyId into environment.
+  meta:
+    id: fld_folder_3
+  children:
+  - name: Login â€” Clinician
+    url: '{{ _.baseUrl }}/api/v1/auth/login'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication: {}
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_10
+    description: Configure clinicianEmail to an active CLINICIAN account. Copy access_token into environment token.
+    body:
+      mimeType: application/json
+      text: "{\n  \"email\": \"{{ _.clinicianEmail }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+  - name: Staff dashboard
+    url: '{{ _.baseUrl }}/api/v1/dashboard/summary'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_11
+    description: Role-scoped metrics.
+  - name: Find demo patient (search Aisha)
+    url: '{{ _.baseUrl }}/api/v1/patients?search=Aisha&limit=50'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_12
+    description: Directory search is by patient name/reference. Copy returned patient id into patientId.
+  - name: List patient journeys
+    url: '{{ _.baseUrl }}/api/v1/patients/{{ _.patientId }}/journeys'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_13
+    description: Copy a journey id from the response into journeyId.
+  - name: Get journey
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_14
+    description: Journey detail.
+  - name: Get journey steps
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/steps'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_15
+    description: Ordered journey steps.
+  - name: Evaluate journey (deterministic; mutates step/journey statuses)
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/evaluate'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_16
+    description: Runs dependency/deadline rules only; it does not invoke the LLM agents.
+    body:
+      mimeType: application/json
+      text: '{}'
+  - name: Get orchestration context
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/orchestration-context'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_17
+    description: Builds current deterministic context and may update journey/step state.
+  - name: Orchestrate journey (agents; may execute mock action)
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/orchestrate'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_18
+    description: Supervisor/agent workflow; requires reachable MAQ AI and API key. Response contains status, decision, result,
+      calls. May record agent runs/action execution.
+    body:
+      mimeType: application/json
+      text: '{}'
+  - name: List journey events
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/events'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_19
+    description: Staff event history.
+  - name: Add staff event (writes event; not verified)
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/events'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_20
+    description: Creates and processes event; request cannot set verified evidence.
+    body:
+      mimeType: application/json
+      text: "{\n  \"event_type\": \"GENERAL_UPDATE\",\n  \"source\": \"insomnia-staff-test\",\n  \"event_time\": \"2026-10-01T10:00:00Z\"\
+        ,\n  \"payload\": { \"comment\": \"Staff API test event\" }\n}"
+  - name: List exceptions
+    url: '{{ _.baseUrl }}/api/v1/exceptions?limit=100'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_21
+    description: Copy an exception id into exceptionId if you intend to resolve a demo exception.
+  - name: List registered actions
+    url: '{{ _.baseUrl }}/api/v1/actions/registry'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_22
+    description: Staff-visible action allowlist.
+  - name: List journey action executions
+    url: '{{ _.baseUrl }}/api/v1/journeys/{{ _.journeyId }}/actions'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_23
+    description: Persisted actions for the selected journey.
+  - name: List agent runs
+    url: '{{ _.baseUrl }}/api/v1/agent-runs?journey_id={{ _.journeyId }}&limit=100'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_24
+    description: Review persisted supervisor and sub-agent records.
+- name: 3 â€” Exceptions and RBAC
+  description: Optional mutations and role-denial checks.
+  meta:
+    id: fld_folder_4
+  children:
+  - name: Resolve exception (mutates status)
+    url: '{{ _.baseUrl }}/api/v1/exceptions/{{ _.exceptionId }}'
+    method: PATCH
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_25
+    description: Only run against a demo exception. Resolution does not remove the clinical blocker.
+    body:
+      mimeType: application/json
+      text: "{\n  \"status\": \"RESOLVED\",\n  \"recommended_action\": \"Reviewed in Insomnia test\"\n}"
+  - name: RBAC check â€” patient should get 403
+    url: '{{ _.baseUrl }}/api/v1/journeys'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_26
+    description: First log in as patient, set its token, then call this staff-only endpoint; expected response is 403.
+- name: 4 â€” Admin user management
+  description: Set token using an ADMIN account before running. PATCH calls change real user state; only use a safe test account
+    and restore changes.
+  meta:
+    id: fld_folder_5
+  children:
+  - name: Login â€” Admin
+    url: '{{ _.baseUrl }}/api/v1/auth/login'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication: {}
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_27
+    description: Configure adminEmail to an active ADMIN. Copy access_token into environment token.
+    body:
+      mimeType: application/json
+      text: "{\n  \"email\": \"{{ _.adminEmail }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+  - name: List users
+    url: '{{ _.baseUrl }}/api/v1/admin/users?limit=100&offset=0'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_28
+    description: Admin-only user directory.
+  - name: Change user role (mutates; restore after test)
+    url: '{{ _.baseUrl }}/api/v1/admin/users/{{ _.userId }}/role'
+    method: PATCH
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_29
+    description: Only use on safe test user. Role must be ADMIN, CLINICIAN, CARE_COORDINATOR, or PATIENT; PATIENT requires
+      a linked patient.
+    body:
+      mimeType: application/json
+      text: "{\n  \"role\": \"CLINICIAN\"\n}"
+- name: 5 â€” Chat assistant (optional; LLM required)
+  description: Chat uses the same JWT and configured MAQ AI provider. Inspect pending_action before confirming any proposed
+    mutation.
+  meta:
+    id: fld_folder_6
+  children:
+  - name: Create chat session
+    url: '{{ _.baseUrl }}/api/v1/chat/sessions'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_30
+    description: Copy response id into chatSessionId.
+    body:
+      mimeType: application/json
+      text: "{\n  \"title\": \"Insomnia API test\"\n}"
+  - name: Send chat message (LLM required)
+    url: '{{ _.baseUrl }}/api/v1/chat/sessions/{{ _.chatSessionId }}/messages'
+    method: POST
+    headers:
+    - name: Content-Type
+      value: application/json
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_31
+    description: May propose a pending action. Copy assistant_message.id to chatMessageId, then explicitly run Confirm or
+      Reject.
+    body:
+      mimeType: application/json
+      text: "{\n  \"content\": \"Summarize this journey: {{ _.journeyId }}\"\n}"
+  - name: List chat messages
+    url: '{{ _.baseUrl }}/api/v1/chat/sessions/{{ _.chatSessionId }}/messages'
+    method: GET
+    headers: []
+    parameters: []
+    authentication:
+      type: bearer
+      token: '{{ _.token }}'
+    settings:
+      cookies:
+        send: true
+        store: true
+      encodeUrl: true
+    meta:
+      id: req_request_32
+    description: Read messages for this account-owned session.
+environments:
+  name: Base Environment
+  meta:
+    id: env_patient_journey_orchestrator
+  data:
+    baseUrl: http://localhost:8000
+    token: ''
+    password: Test@123
+    patientEmail: aisha.rahman.0003@patient-demo.example.test
+    clinicianEmail: ''
+    coordinatorEmail: ''
+    adminEmail: ''
+    patientJourneyId: ''
+    patientId: ''
+    journeyId: ''
+    exceptionId: ''
+    userId: ''
+    chatSessionId: ''
+    chatMessageId: ''
+  dataPropertyOrder:
+    '&':
+    - baseUrl
+    - token
+    - password
+    - patientEmail
+    - clinicianEmail
+    - coordinatorEmail
+    - adminEmail
+    - patientJourneyId
+    - patientId
+    - journeyId
+    - exceptionId
+    - userId
+    - chatSessionId
+    - chatMessageId

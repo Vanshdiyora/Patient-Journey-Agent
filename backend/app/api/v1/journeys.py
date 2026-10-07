@@ -12,11 +12,12 @@ from app.core.authorization import (
     scope_patient_ids,
     scope_note,
 )
-from app.models import Journey, JourneyStep, PatientEvent, Patient, PathwayStep, Pathway
+from app.models import Journey, Patient, Pathway
 from app.schemas import JourneyResponse, JourneyStepResponse
 from app.orchestration.journey_engine import JourneyEngine
 from app.orchestration.langgraph_supervisor import SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
+from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
 
 router = APIRouter()
 
@@ -115,20 +116,26 @@ def list_journeys(
     }
 
 
+@router.get("/journeys/available-pathways")
+def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff)):
+    pathways = db.query(Pathway).filter(Pathway.status == "ACTIVE").order_by(Pathway.name).all()
+    return [
+        {"id": pathway.id, "code": pathway.code, "name": pathway.name,
+         "description": pathway.description, "version": pathway.version}
+        for pathway in pathways
+    ]
+
+
 @router.get("/journeys/{journey_id}", response_model=JourneyResponse)
 def get_journey(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
-    return get_journey_scoped(journey_id, db, user)
+    journey = get_journey_scoped(journey_id, db, user)
+    return journeys_with_pathways(db, [journey])[0]
 
 
 @router.get("/journeys/{journey_id}/steps", response_model=list[JourneyStepResponse])
 def steps(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
     get_journey_scoped(journey_id, db, user)
-    return (
-        db.query(JourneyStep)
-        .filter(JourneyStep.journey_id == journey_id)
-        .order_by(JourneyStep.due_at)
-        .all()
-    )
+    return steps_with_pathway_details(db, journey_id)
 
 
 @router.post("/journeys/{journey_id}/evaluate")

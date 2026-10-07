@@ -11,10 +11,11 @@ export default function CarePlanPanel({ steps, stepRows }) {
         <div className="timeline">{stepRows.map((s, i) => (
           <div className={`timeline-item ${String(s.status).toLowerCase()}`} key={s.id}>
             <div className="timeline-marker">
-              {["COMPLETED", "RESOLVED"].includes(String(s.status).toLowerCase()) ? <CheckCircle2 size={17} /> : <CalendarClock size={15} />}
+              {["COMPLETED", "RESOLVED"].includes(String(s.status).toUpperCase()) ? <CheckCircle2 size={17} /> : <CalendarClock size={15} />}
             </div>
             <div className="timeline-content">
-              <div className="timeline-top"><strong>Step {i + 1}</strong><Badge kind="status" value={s.status} /></div>
+              <div className="timeline-top"><strong>{s.name || `Step ${i + 1}`}</strong><Badge kind="status" value={s.status} /></div>
+              {s.description && <span className="timeline-sub">{s.description}</span>}
               <div className="timeline-dates">
                 {s.started_at && <span>Started {formatDate(s.started_at, true)}</span>}
                 {s.due_at && <span>Due {formatDate(s.due_at, true)}</span>}
