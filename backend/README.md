@@ -28,6 +28,7 @@ For an empty local PostgreSQL database, run these from the repository root:
 ```powershell
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/Create Tables.sql"
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/patient_journey_orchestrator_seed.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
 ```
 
 The seed creates 1,200 staff accounts and 1,200 patient accounts. Each patient
@@ -47,6 +48,7 @@ patient portal demo records by running:
 
 ```powershell
 psql -h localhost -U postgres -d patient_journey_orchestrator -f migrations/20260930_add_patient_email.sql
+psql -h localhost -U postgres -d patient_journey_orchestrator -f migrations/20261007_add_step_time_limits.sql
 python scripts/seed_demo_patient_portal.py
 ```
 
@@ -64,13 +66,31 @@ After login, the patient portal loads `GET /api/v1/me/journeys` and shows the
 journeys for that patient only. A new patient account therefore starts with an
 empty care plan until staff starts a journey.
 
+Administrators can create active pathway templates from **Care pathways**.
+Each ordered step has a code, name, type, details, and time limit in hours.
+Steps created in the admin UI are required. Only administrators can create
+pathway templates.
+
 Staff can open **Patients → patient profile → Start a care journey**, select an
-active pathway and priority, then submit. The backend creates one journey and
-its pathway steps together. The first step starts as `READY`; later steps start
-as `PENDING`, with due dates based on the pathway template. The patient sees
-the pathway name, care steps and progress on **My Journey** after signing in
-or refreshing the portal. Staff cannot start another active journey for the
-same patient and pathway until the existing one is completed or cancelled.
+active pathway and priority, review or override each step's time limit for
+that patient, then submit. The backend creates the journey and a snapshot of
+its pathway steps and limits together. A step's timer starts when the step
+first becomes `READY`; later steps receive their due date only when they
+become ready. Staff can adjust an unfinished step's time limit from the staff
+journey detail page. The patient sees the pathway name, step details, time
+limits, due dates and progress on **My Journey**. Staff cannot start another
+active journey for the same patient and pathway until the existing one is
+completed or cancelled.
+
+For an existing database, apply the migration once after the base schema
+exists and before starting the backend:
+
+```powershell
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
+```
+
+Do not rerun the bulk seed SQL against an existing database; it deletes and
+recreates its synthetic records.
 
 The patient must have a `PATIENT` user account linked to that same patient
 record. Seeded patients already have linked accounts; staff should confirm the
@@ -128,12 +148,15 @@ The agents use this client through `app/llm/provider.py`, so the agent contracts
 - `GET /api/v1/users/me`
 - `GET /api/v1/dashboard/summary`
 - `GET /api/v1/patients`
+- `GET /api/v1/pathways` (administrator pathway management)
+- `POST /api/v1/pathways` (create an active pathway and ordered steps)
 - `GET /api/v1/journeys/available-pathways` (staff)
-- `POST /api/v1/patients/{patient_id}/journeys` (staff; `pathway_id`, optional `priority`)
+- `POST /api/v1/patients/{patient_id}/journeys` (staff; pathway, priority, optional per-step time limits)
 - `GET /api/v1/me/journeys` (signed-in patient)
 - `GET /api/v1/journeys`
 - `GET /api/v1/journeys/{journey_id}`
 - `GET /api/v1/journeys/{journey_id}/steps`
+- `PATCH /api/v1/journeys/{journey_id}/steps/{step_id}/time-limit`
 - `GET /api/v1/journeys/{journey_id}/events`
 - `POST /api/v1/journeys/{journey_id}/events`
 - `POST /api/v1/journeys/{journey_id}/evaluate`

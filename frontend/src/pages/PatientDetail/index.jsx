@@ -18,12 +18,25 @@ export default function PatientDetail() {
   const pathways = useAsync(() => journeysApi.availablePathways(), []);
   const toast = useToast();
   const [pathwayId, setPathwayId] = useState("");
+  const [timeLimits, setTimeLimits] = useState({});
   const [priority, setPriority] = useState("MEDIUM");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const p = patient.data;
   const js = toList(journeys.data, "items");
   const pathwayRows = toList(pathways.data);
+  const selectedPathway = pathwayRows.find(pathway => pathway.id === pathwayId);
+
+  const choosePathway = (id) => {
+    setPathwayId(id);
+    const selected = pathwayRows.find(pathway => pathway.id === id);
+    setTimeLimits(Object.fromEntries(
+      (selected?.steps || []).map(step => [
+        step.id,
+        step.time_limit_hours ?? Math.max(step.due_after_days || 1, 1) * 24,
+      ])
+    ));
+  };
 
   const startJourney = async (event) => {
     event.preventDefault();
@@ -31,9 +44,16 @@ export default function PatientDetail() {
     setBusy(true);
     setFormError("");
     try {
-      await patientsApi.startJourney(patientId, { pathway_id: pathwayId, priority });
+      await patientsApi.startJourney(patientId, {
+        pathway_id: pathwayId,
+        priority,
+        step_time_limits_hours: Object.fromEntries(
+          Object.entries(timeLimits).map(([stepId, hours]) => [stepId, Number(hours)])
+        ),
+      });
       await journeys.refetch();
       setPathwayId("");
+      setTimeLimits({});
       toast.success("Care journey started. The patient can now see it after signing in or refreshing their portal.");
     } catch (error) {
       setFormError(getErrorMessage(error));
@@ -66,10 +86,34 @@ export default function PatientDetail() {
           <div className="start-journey-copy"><strong>Start a care journey</strong><span>Choose an active pathway to add its steps to this patient's portal.</span></div>
           {pathways.error ? <div className="event-form-error">Could not load pathways: {getErrorMessage(pathways.error)}</div> :
             pathwayRows.length ? <div className="start-journey-controls">
-              <Select value={pathwayId} onChange={setPathwayId} label="Care pathway" placeholder="Choose pathway" options={pathwayRows.map(w => ({ value: w.id, label: `${w.name} (v${w.version})` }))} disabled={busy} />
+              <Select value={pathwayId} onChange={choosePathway} label="Care pathway" placeholder="Choose pathway" options={pathwayRows.map(w => ({ value: w.id, label: `${w.name} (v${w.version})` }))} disabled={busy} />
               <Select value={priority} onChange={setPriority} label="Priority" options={["LOW", "MEDIUM", "HIGH", "CRITICAL"].map(value => ({ value, label: humanize(value) }))} disabled={busy} />
               <button className="primary-btn" type="submit" disabled={!pathwayId || busy}>{busy ? "Starting…" : "Start journey"}</button>
             </div> : <span className="start-journey-note">{pathways.loading ? "Loading pathways…" : "No active pathways are available."}</span>}
+          {selectedPathway?.steps?.length > 0 && (
+            <div className="journey-step-limits">
+              <strong>Step time limits</strong>
+              <p>Set the allowed time from when each step becomes ready. These values apply to this patient’s journey only.</p>
+              {selectedPathway.steps.map(step => (
+                <label className="journey-step-limit" key={step.id}>
+                  <span><b>{step.sequence_number}. {step.name}</b><small>{step.description || step.code}</small></span>
+                  <span className="journey-step-limit-input">
+                    <input
+                      aria-label={`${step.name} time limit in hours`}
+                      type="number"
+                      min="1"
+                      max="8760"
+                      required
+                      value={timeLimits[step.id] ?? ""}
+                      onChange={event => setTimeLimits(current => ({ ...current, [step.id]: event.target.value }))}
+                      disabled={busy}
+                    />
+                    <small>hours</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
           {formError && <div className="event-form-error" role="alert">{formError}</div>}
         </form>
         {journeys.error && <ErrorState error={journeys.error} title="Could not load journeys" />}

@@ -14,3 +14,4 @@ export { agentsApi } from "./agents";
 export { actionsApi } from "./actions";
 export { adminApi } from "./admin";
 export { meApi } from "./me";
+export { pathwaysApi } from "./pathways";

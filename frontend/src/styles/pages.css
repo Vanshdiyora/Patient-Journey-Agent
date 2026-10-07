@@ -180,3 +180,54 @@
 .error-icon{width:16px;height:16px;border-radius:50%;background:#c74b53;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none}
 .secure-note{margin-top:20px;display:flex;align-items:center;justify-content:center;gap:6px;color:#899592;font-size:9px}
 .secure-note svg{color:#52a078}
+
+/* Pathway authoring and per-journey step deadlines */
+.pathway-form{padding:18px;display:flex;flex-direction:column;gap:18px}
+.pathway-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pathway-form label,.step-time-limit-form label{display:flex;flex-direction:column;gap:6px;font-size:10px;font-weight:600;color:#586864}
+.pathway-form input:not([type="checkbox"]),.pathway-form textarea,.step-time-limit-form input{width:100%;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:9px 10px;outline:0;font-size:11px;color:#394b47}
+.pathway-form textarea{resize:vertical;line-height:1.5}
+.pathway-form input:focus,.pathway-form textarea:focus,.step-time-limit-form input:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
+.pathway-description-field{grid-column:1/-1}
+.pathway-steps-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #edf0f0;padding-bottom:10px}
+.pathway-steps-heading strong,.pathway-steps-heading span{display:block}
+.pathway-steps-heading strong{font-size:12px;color:#394c48}
+.pathway-steps-heading span{font-size:10px;color:#87938f;margin-top:3px}
+.pathway-step-editors{display:flex;flex-direction:column;gap:12px}
+.pathway-step-editor{border:1px solid #e8eceb;border-radius:9px;padding:14px}
+.pathway-step-editor-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;color:#344843;font-size:11px}
+.pathway-step-fields{grid-template-columns:repeat(4,minmax(0,1fr))}
+.pathway-required-field{display:flex!important;flex-direction:row!important;align-items:center;gap:8px!important;grid-column:1/-1}
+.pathway-required-field input{accent-color:var(--teal)}
+.pathway-list{padding:8px 18px}
+.pathway-list-item{border-bottom:1px solid #edf0f0}
+.pathway-list-item:last-child{border-bottom:0}
+.pathway-list-item summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 2px;cursor:pointer;list-style:none}
+.pathway-list-item summary::-webkit-details-marker{display:none}
+.pathway-list-item summary strong,.pathway-list-item summary small{display:block}
+.pathway-list-item summary strong{font-size:11px;color:#344843}
+.pathway-list-item summary small{font-size:9px;color:#87938f;margin-top:4px}
+.pathway-list-steps{margin:0 0 12px;padding:0 0 0 22px}
+.pathway-list-steps li{display:flex;justify-content:space-between;gap:14px;padding:8px 0;color:#65736f;font-size:10px}
+.pathway-list-steps li strong,.pathway-list-steps li small{display:block}
+.pathway-list-steps li small{font-size:9px;color:#87938f;margin-top:3px}
+.pathway-list-steps li>span:last-child{white-space:nowrap}
+.journey-step-limits{border-top:1px solid #edf0f0;padding-top:12px}
+.journey-step-limits>strong{font-size:11px;color:#394c48}
+.journey-step-limits>p{font-size:10px;color:#87938f;margin:4px 0 10px}
+.journey-step-limit{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:9px 0;border-top:1px solid #f0f2f2}
+.journey-step-limit>span:first-child b,.journey-step-limit>span:first-child small{display:block}
+.journey-step-limit>span:first-child b{font-size:10px;color:#52615e}
+.journey-step-limit>span:first-child small{font-size:9px;color:#87938f;margin-top:3px}
+.journey-step-limit-input{display:flex;align-items:center;gap:7px}
+.journey-step-limit-input input{width:92px;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:7px 8px;font-size:10px}
+.journey-step-limit-input small{font-size:9px;color:#87938f}
+.step-time-limit-form{display:flex;align-items:flex-end;gap:8px;margin-top:9px}
+.step-time-limit-form label{flex-direction:row;align-items:center;gap:8px}
+.step-time-limit-form input{width:92px;padding:6px 8px}
+.step-time-limit-form .secondary-btn{height:32px;font-size:10px}
+.step-time-limit-note{font-size:9px;color:#87938f;margin-top:5px}
+
+@media(max-width:700px){
+  .pathway-step-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

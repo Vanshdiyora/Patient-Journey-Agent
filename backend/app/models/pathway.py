@@ -28,6 +28,7 @@ class PathwayStep(Base):
     sequence_number: Mapped[int] = mapped_column(Integer)
     required: Mapped[bool] = mapped_column(Boolean)
     due_after_days: Mapped[int | None] = mapped_column(Integer)
+    time_limit_hours: Mapped[int | None] = mapped_column(Integer)
     completion_criteria: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

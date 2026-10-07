@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from sqlalchemy.orm import Session
-from app.models import Journey, JourneyStep
+from app.models import Journey, JourneyStep, PathwayStep
 from app.rules.dependency_engine import DependencyEngine
 from app.rules.deadline_engine import DeadlineEngine
 
@@ -16,9 +16,15 @@ class JourneyRuleEngine:
         if not journey:
             return None
         now = datetime.now(timezone.utc)
-        steps = self.db.query(JourneyStep).filter(JourneyStep.journey_id == journey_id).order_by(JourneyStep.due_at.asc()).all()
+        steps = (
+            self.db.query(JourneyStep)
+            .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+            .filter(JourneyStep.journey_id == journey_id)
+            .order_by(PathwayStep.sequence_number.asc())
+            .all()
+        )
         evaluations = []
-        for step in steps:
+        for index, step in enumerate(steps):
             if step.status in {"COMPLETED", "CANCELLED"}:
                 evaluations.append({"step_id": str(step.id), "status": step.status, "ready": False, "blocked": False, "reason": None})
                 continue
@@ -29,14 +35,34 @@ class JourneyRuleEngine:
             if blocked:
                 step.status = "BLOCKED"
                 step.block_reason = "; ".join(b["reason"] for b in blockers)
-            elif deadline["overdue"] and step.status in {"PENDING", "READY"}:
+            elif deadline["overdue"]:
                 step.status = "BLOCKED"
                 step.block_reason = deadline["reason"]
-            elif step.status == "PENDING":
-                prior_active = any(s.status not in {"COMPLETED", "CANCELLED"} and s.due_at and s.due_at < step.due_at for s in steps if s.id != step.id)
-                if not prior_active:
+            else:
+                prior_active = any(
+                    prior.status not in {"COMPLETED", "CANCELLED"}
+                    for prior in steps[:index]
+                )
+                if prior_active:
+                    if step.status == "BLOCKED" and step.due_at is None:
+                        step.status = "PENDING"
+                        step.block_reason = None
+                elif step.status in {"PENDING", "BLOCKED"}:
                     step.status = "READY"
+                    step.started_at = now
+                    step.due_at = (
+                        now + timedelta(hours=step.time_limit_hours)
+                        if step.time_limit_hours is not None
+                        else None
+                    )
                     step.block_reason = None
+                elif step.status == "READY" and step.due_at is None:
+                    step.started_at = step.started_at or now
+                    step.due_at = (
+                        step.started_at + timedelta(hours=step.time_limit_hours)
+                        if step.time_limit_hours is not None
+                        else None
+                    )
             evaluations.append({"step_id": str(step.id), "status": step.status, "ready": step.status == "READY", "blocked": step.status == "BLOCKED", "reason": step.block_reason, "dependency_results": dep_results})
         if steps and all(s.status in {"COMPLETED", "CANCELLED"} for s in steps):
             journey.status = "COMPLETED"

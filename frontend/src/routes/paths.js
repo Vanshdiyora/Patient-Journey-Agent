@@ -15,6 +15,7 @@ export const PATHS = {
   agentRuns: "/agent-runs",
   actions: "/actions",
   users: "/users",
+  pathways: "/pathways/manage",
 };
 
 /** Build a concrete path from a pattern, replacing :params with values. */

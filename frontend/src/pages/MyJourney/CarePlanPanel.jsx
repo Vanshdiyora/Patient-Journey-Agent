@@ -17,6 +17,7 @@ export default function CarePlanPanel({ steps, stepRows }) {
               <div className="timeline-top"><strong>{s.name || `Step ${i + 1}`}</strong><Badge kind="status" value={s.status} /></div>
               {s.description && <span className="timeline-sub">{s.description}</span>}
               <div className="timeline-dates">
+                {s.time_limit_hours != null && <span>Time limit {s.time_limit_hours} hour{s.time_limit_hours === 1 ? "" : "s"} from ready</span>}
                 {s.started_at && <span>Started {formatDate(s.started_at, true)}</span>}
                 {s.due_at && <span>Due {formatDate(s.due_at, true)}</span>}
               </div>

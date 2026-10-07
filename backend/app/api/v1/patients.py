@@ -8,6 +8,7 @@ from app.models import Patient, Journey, JourneyStep, Pathway, PathwayStep, Exce
 from app.schemas import PatientResponse, JourneyResponse
 from app.schemas.journey import JourneyCreate
 from app.api.v1.journey_views import journey_with_pathway, journeys_with_pathways
+from app.orchestration.journey_engine import JourneyEngine
 
 router = APIRouter()
 
@@ -134,23 +135,39 @@ def start_patient_journey(
         raise HTTPException(422, "This pathway has no care steps")
 
     now = datetime.now(timezone.utc)
-    due_days = [step.due_after_days for step in templates if step.due_after_days is not None]
+    overrides = data.step_time_limits_hours
+    template_ids = {step.id for step in templates}
+    if not set(overrides).issubset(template_ids):
+        raise HTTPException(422, "Time-limit overrides must reference steps in the selected pathway")
+    time_limits = {
+        step.id: overrides.get(
+            step.id,
+            step.time_limit_hours
+            if step.time_limit_hours is not None
+            else max(step.due_after_days or 1, 1) * 24,
+        )
+        for step in templates
+    }
+    total_hours = sum(time_limits.values())
     journey = Journey(
         id=uuid4(), patient_id=patient_id, pathway_id=pathway.id,
         pathway_version=pathway.version, status="ACTIVE", priority=data.priority,
         started_at=now,
-        target_completion_at=now + timedelta(days=max(due_days)) if due_days else None,
+        target_completion_at=now + timedelta(hours=total_hours) if time_limits else None,
         created_at=now, updated_at=now,
     )
     db.add(journey)
-    for index, template in enumerate(templates):
+    for template in templates:
         db.add(JourneyStep(
             id=uuid4(), journey_id=journey.id, pathway_step_id=template.id,
-            status="READY" if index == 0 else "PENDING",
-            due_at=now + timedelta(days=template.due_after_days) if template.due_after_days is not None else None,
-            started_at=now if index == 0 else None,
+            status="PENDING",
+            time_limit_hours=time_limits[template.id],
+            due_at=None,
+            started_at=None,
             created_at=now, updated_at=now,
         ))
+    db.flush()
+    JourneyEngine(db).evaluate(journey.id)
     db.commit()
     db.refresh(journey)
     return journey_with_pathway(journey, pathway.name)

@@ -22,6 +22,7 @@ export default function JourneyDetail() {
   const agents = useAsync(() => agentsApi.runs({ journey_id: journeyId, limit: 20 }), [journeyId]);
 
   const [busy, setBusy] = useState("");
+  const [busyStepId, setBusyStepId] = useState("");
   const [message, setMessage] = useState("");
   const [confirm, confirmModal] = useConfirm();
   const toast = useToast();
@@ -82,6 +83,19 @@ export default function JourneyDetail() {
     }
   };
 
+  const updateStepTimeLimit = async (stepId, hours) => {
+    setBusyStepId(stepId);
+    try {
+      await journeysApi.updateStepTimeLimit(journeyId, stepId, hours);
+      await Promise.all([journey.refetch(), steps.refetch()]);
+      toast.success("Step time limit updated.");
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusyStepId("");
+    }
+  };
+
   return <div>
     <Link className="back-link" to="/journeys"><ArrowLeft size={16} /> Back to journeys</Link>
     <PageHeading
@@ -107,7 +121,7 @@ export default function JourneyDetail() {
 
     <div className="content-grid content-grid--journey">
       <Panel wide title="Journey steps" subtitle="Current pathway state">
-        <StepsTimeline steps={stepRows} />
+        <StepsTimeline steps={stepRows} onUpdateTimeLimit={updateStepTimeLimit} busyStepId={busyStepId} />
       </Panel>
 
       {observability && <ContextPanel journeyId={j.id} />}

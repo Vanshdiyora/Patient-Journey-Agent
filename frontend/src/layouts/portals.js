@@ -1,6 +1,6 @@
 import {
   Activity, AlertTriangle, Bot, HeartPulse, LayoutDashboard, Network,
-  UserCog, Users,
+  ListChecks, UserCog, Users,
 } from "lucide-react";
 import { ROLES, roleOf } from "../utils/roles";
 import { PATHS } from "../routes/paths";
@@ -24,6 +24,7 @@ export const PORTALS = {
       { to: PATHS.exceptions, label: "Exceptions", icon: AlertTriangle },
       { to: PATHS.agentRuns, label: "Agent activity", icon: Bot },
       { to: PATHS.actions, label: "Action registry", icon: Activity },
+      { to: PATHS.pathways, label: "Care pathways", icon: ListChecks, adminOnly: true },
       { to: PATHS.users, label: "User management", icon: UserCog, adminOnly: true },
     ],
   },

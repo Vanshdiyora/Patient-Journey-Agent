@@ -29,6 +29,7 @@ def steps_with_pathway_details(db: Session, journey_id) -> list[dict]:
             "name": template.name,
             "description": template.description,
             "sequence_number": template.sequence_number,
+            "time_limit_hours": step.time_limit_hours,
         }
         for step, template in rows
     ]

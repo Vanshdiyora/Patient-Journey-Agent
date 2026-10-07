@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -12,8 +13,9 @@ from app.core.authorization import (
     scope_patient_ids,
     scope_note,
 )
-from app.models import Journey, Patient, Pathway
+from app.models import Journey, Patient, Pathway, PathwayStep
 from app.schemas import JourneyResponse, JourneyStepResponse
+from app.schemas.journey import JourneyStepTimeLimitUpdate
 from app.orchestration.journey_engine import JourneyEngine
 from app.orchestration.langgraph_supervisor import SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
@@ -121,7 +123,23 @@ def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff
     pathways = db.query(Pathway).filter(Pathway.status == "ACTIVE").order_by(Pathway.name).all()
     return [
         {"id": pathway.id, "code": pathway.code, "name": pathway.name,
-         "description": pathway.description, "version": pathway.version}
+         "description": pathway.description, "version": pathway.version,
+         "steps": [
+             {
+                 "id": step.id,
+                 "code": step.code,
+                 "name": step.name,
+                 "description": step.description,
+                 "step_type": step.step_type,
+                 "required": step.required,
+                 "sequence_number": step.sequence_number,
+                 "time_limit_hours": step.time_limit_hours,
+             }
+             for step in db.query(PathwayStep)
+             .filter(PathwayStep.pathway_id == pathway.id)
+             .order_by(PathwayStep.sequence_number)
+             .all()
+         ]}
         for pathway in pathways
     ]
 
@@ -135,6 +153,42 @@ def get_journey(journey_id: UUID, db: Session = Depends(get_db), user=Depends(re
 @router.get("/journeys/{journey_id}/steps", response_model=list[JourneyStepResponse])
 def steps(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
     get_journey_scoped(journey_id, db, user)
+    return steps_with_pathway_details(db, journey_id)
+
+
+@router.patch("/journeys/{journey_id}/steps/{step_id}/time-limit")
+def update_step_time_limit(
+    journey_id: UUID,
+    step_id: UUID,
+    data: JourneyStepTimeLimitUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_staff),
+):
+    get_journey_scoped(journey_id, db, user)
+    step = (
+        db.query(JourneyStep)
+        .filter(JourneyStep.id == step_id, JourneyStep.journey_id == journey_id)
+        .first()
+    )
+    if not step:
+        raise HTTPException(404, "Journey step not found")
+    if step.status in {"COMPLETED", "CANCELLED"}:
+        raise HTTPException(409, "Time limits cannot be changed for completed or cancelled steps")
+
+    now = datetime.now(timezone.utc)
+    step.time_limit_hours = data.time_limit_hours
+    if step.status in {"READY", "IN_PROGRESS"}:
+        step.started_at = now
+        step.due_at = now + timedelta(hours=data.time_limit_hours)
+    elif step.status == "BLOCKED" and step.due_at is not None:
+        step.status = "READY"
+        step.started_at = now
+        step.due_at = now + timedelta(hours=data.time_limit_hours)
+        step.block_reason = None
+    step.updated_at = now
+    JourneyEngine(db).evaluate(journey_id)
+    db.commit()
+    db.refresh(step)
     return steps_with_pathway_details(db, journey_id)
 
 
