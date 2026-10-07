@@ -1,729 +1,523 @@
 """
 Chat assistant tool registry.
 
-The LLM never performs anything by itself: each tool call proposed by the model
-is validated and executed server-side with the *user's own* authorization
-context (same helpers as the REST API), so role checks always apply.
+The LLM never performs anything by itself. Every tool is declared once here
+(ToolSpec) with the roles allowed to use it, the parameters it needs, and
+whether it needs the user's confirmation. The chat service then enforces, in
+this order and entirely server-side:
 
-Two-step confirmation: tools with `requires_confirmation=True` are stored as a
-pending action on an assistant message and only run after the user confirms in
-chat. Read-only tools run immediately. Mutating executors call the SAME service
-layer as the REST API (app.services.journey_service, orchestration engines) —
-business logic is never duplicated inside the chatbot.
+  1. role permission   -> "You are not permitted to ..." (model is not asked)
+  2. missing arguments -> a question back to the user (model is not asked)
+  3. argument validation + scope checks (dry run, nothing is written)
+  4. mutating tools   -> stored as a pending action; the user must confirm
+  5. execution        -> role + scope are checked again at execution time
+
+Read tools run immediately; they are functions over DB queries scoped to the
+caller (see tool_read). Mutating tools reuse the REST handlers (see tool_write).
 """
-from datetime import datetime, timezone
-from typing import Any
-from uuid import UUID
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.authorization import (
-    STAFF_ROLES,
-    get_journey_for_action,
-    get_journey_scoped,
-    get_owned_patient,
-    scope_patient_ids,
+from app.core.authorization import STAFF_ROLES
+from app.llm import tool_read as read
+from app.llm import tool_write as write
+from app.llm.tool_helpers import (
+    ToolPermissionError,
+    ToolValidationError,
+    bool_value,
+    enum_value,
+    int_value,
+    patient_in_scope,
+    readable_journey,
+    text_value,
+    uuid_value,
 )
-from app.models import Journey, JourneyStep, Patient, Pathway, PathwayStep
-from app.models.user import User
-from app.services.journey_service import (
-    pathway_steps,
-    start_journey_for_patient,
-)
-
-
-class ToolValidationError(Exception):
-    """Raised when LLM-proposed tool arguments fail validation."""
-
-
-# ---------------------------------------------------------------------------
-# Parameter validation (LLM output is untrusted)
-# ---------------------------------------------------------------------------
-
-def _require_dict(args: Any) -> dict[str, Any]:
-    if not isinstance(args, dict):
-        raise ToolValidationError("Tool arguments must be a JSON object")
-    return args
-
-
-def _enum(value: Any, allowed: tuple[str, ...], field: str) -> str:
-    if not isinstance(value, str) or value.strip().upper() not in allowed:
-        raise ToolValidationError(f"{field} must be one of: {', '.join(allowed)}")
-    return value.strip().upper()
-
-
-def _uuid(value: Any, field: str) -> UUID:
-    try:
-        return UUID(str(value))
-    except (TypeError, ValueError):
-        raise ToolValidationError(f"{field} must be a valid id")
-
-
-def _text(value: Any, field: str, *, max_len: int = 2000) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ToolValidationError(f"{field} must be non-empty text")
-    return value.strip()[:max_len]
-
-
-def _int(value: Any, field: str, lo: int, hi: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ToolValidationError(f"{field} must be an integer")
-    if not lo <= value <= hi:
-        raise ToolValidationError(f"{field} must be between {lo} and {hi}")
-    return value
-
-
-def _datetime_or_now(value: Any, field: str) -> datetime:
-    if value is None:
-        return datetime.now(timezone.utc)
-    if not isinstance(value, str):
-        raise ToolValidationError(f"{field} must be an ISO-8601 timestamp")
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        raise ToolValidationError(f"{field} must be an ISO-8601 timestamp")
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
-
-
-# ---------------------------------------------------------------------------
-# Shared serialization helpers
-# ---------------------------------------------------------------------------
-
-def _patient_name(p: Patient | None) -> str | None:
-    return f"{p.first_name} {p.last_name}" if p else None
-
-
-def _patient_ref(p: Patient) -> dict[str, Any]:
-    return {
-        "id": str(p.id),
-        "name": _patient_name(p),
-        "reference": p.patient_reference,
-    }
-
-
-def _patient_by_id(db: Session, patient_id: UUID) -> Patient | None:
-    return db.query(Patient).filter(Patient.id == patient_id).first()
-
-
-def _serialize_journey(j: Journey, patient: Patient | None, pathway_name: str | None = None) -> dict[str, Any]:
-    return {
-        "id": str(j.id),
-        "patient_id": str(j.patient_id),
-        "status": (j.status or "").lower(),
-        "priority": (j.priority or "").lower(),
-        "started_at": j.started_at.isoformat() if j.started_at else None,
-        "pathway_version": j.pathway_version,
-        "patient_name": _patient_name(patient),
-        "patient_reference": patient.patient_reference if patient else None,
-        "pathway_name": pathway_name,
-    }
-
-
-def _pathway_name_map(db: Session, pathway_ids: set[UUID]) -> dict[UUID, str]:
-    if not pathway_ids:
-        return {}
-    rows = db.query(Pathway).filter(Pathway.id.in_(pathway_ids)).all()
-    return {p.id: p.name for p in rows}
-
-
-def _serialize_step(step: JourneyStep, template: PathwayStep | None) -> dict[str, Any]:
-    return {
-        "id": str(step.id),
-        "name": template.name if template else None,
-        "sequence_number": template.sequence_number if template else None,
-        "status": (step.status or "").lower(),
-        "due_at": step.due_at.isoformat() if step.due_at else None,
-        "completed_at": step.completed_at.isoformat() if step.completed_at else None,
-        "block_reason": step.block_reason,
-    }
-
-
-def _journeys_in_scope(db: Session, user: User, patient_id: UUID | None = None) -> list[Journey]:
-    q = db.query(Journey)
-    if patient_id is not None:
-        q = q.filter(Journey.patient_id == patient_id)
-    else:
-        ids = scope_patient_ids(db, user)
-        if ids is not None:
-            q = q.filter(Journey.patient_id.in_(ids))
-    return q.order_by(Journey.updated_at.desc()).limit(25).all()
-
-
-def _patient_in_scope(db: Session, user: User, patient_id: UUID) -> Patient:
-    """Patient row the user may read, else ToolValidationError (404-equivalent)."""
-    ids = scope_patient_ids(db, user)
-    if ids is not None and patient_id not in ids:
-        raise ToolValidationError("Patient not found in your scope")
-    patient = _patient_by_id(db, patient_id)
-    if not patient:
-        raise ToolValidationError("Patient not found")
-    return patient
-
-
-def _staff_required(user: User) -> None:
-    if user.role not in STAFF_ROLES:
-        raise ToolValidationError("Only care team members can use this action")
-
-
-def _require_patient_id_in_scope(db: Session, user: User, args: dict[str, Any]) -> UUID:
-    """Resolve the target patient: staff pass patient_id; patients are pinned to their own record."""
-    if user.role == "PATIENT":
-        return get_owned_patient(user)
-    raw = args.get("patient_id")
-    if raw is None:
-        raise ToolValidationError("patient_id is required")
-    patient_id = _uuid(raw, "patient_id")
-    ids = scope_patient_ids(db, user)
-    if ids is not None and patient_id not in ids:
-        raise ToolValidationError("Patient not found in your scope")
-    return patient_id
-
-
-# ---------------------------------------------------------------------------
-# Read tools — always run with the requesting user's authorization.
-# ---------------------------------------------------------------------------
-
-def tool_search_patients(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    """Staff-only directory search so the assistant can resolve names like 'Vansh'."""
-    args = _require_dict(args)
-    _staff_required(user)
-    query = _text(args.get("query"), "query", max_len=120)
-    term = f"%{query}%"
-    q = (
-        db.query(Patient)
-        .filter(
-            Patient.first_name.ilike(term)
-            | Patient.last_name.ilike(term)
-            | Patient.patient_reference.ilike(term)
-        )
-        .order_by(Patient.first_name, Patient.last_name)
-        .limit(10)
-    )
-    ids = scope_patient_ids(db, user)
-    if ids is not None:
-        q = q.filter(Patient.id.in_(ids))
-    matches = q.all()
-    return {
-        "tool": "search_patients",
-        "summary": f"Found {len(matches)} patient(s) matching \"{query}\"." if matches
-        else f"No patients match \"{query}\".",
-        "data": {"patients": [_patient_ref(p) for p in matches]},
-    }
-
-
-def tool_get_patient_summary(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    """Patient identity + their journeys. Patients can only ever get their own."""
-    args = _require_dict(args)
-    patient_id = _require_patient_id_in_scope(db, user, args)
-    patient = _patient_by_id(db, patient_id)
-    if not patient:
-        raise ToolValidationError("Patient not found")
-
-    journeys = _journeys_in_scope(db, user, patient_id=patient_id)
-    pathway_names = _pathway_name_map(db, {j.pathway_id for j in journeys})
-    summary = {
-        "id": str(patient.id),
-        "name": _patient_name(patient),
-        "reference": patient.patient_reference,
-    }
-    if user.role in STAFF_ROLES:
-        summary["date_of_birth"] = patient.date_of_birth.isoformat() if patient.date_of_birth else None
-        summary["gender"] = patient.gender
-    return {
-        "tool": "get_patient_summary",
-        "summary": f"Patient {summary['name']} ({summary['reference']}) has {len(journeys)} journey(s).",
-        "data": {
-            "patient": summary,
-            "journeys": [
-                _serialize_journey(j, patient, pathway_names.get(j.pathway_id))
-                for j in journeys
-            ],
-        },
-    }
-
-
-def tool_list_pathways(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    """Staff-only: active pathway templates the assistant may propose starting."""
-    args = _require_dict(args)
-    _staff_required(user)
-    pathways = (
-        db.query(Pathway)
-        .filter(Pathway.status == "ACTIVE")
-        .order_by(Pathway.name)
-        .all()
-    )
-    data = []
-    for pathway in pathways:
-        templates = pathway_steps(db, pathway.id)
-        data.append({
-            "id": str(pathway.id),
-            "code": pathway.code,
-            "name": pathway.name,
-            "description": pathway.description,
-            "steps": [t.name for t in templates],
-        })
-    return {
-        "tool": "list_pathways",
-        "summary": f"{len(data)} active pathway(s) available.",
-        "data": {"pathways": data},
-    }
-
-
-def tool_list_journeys(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    args = _require_dict(args)
-    journeys = _journeys_in_scope(db, user)
-    pathway_names = _pathway_name_map(db, {j.pathway_id for j in journeys})
-    return {
-        "tool": "list_journeys",
-        "summary": f"Found {len(journeys)} journeys.",
-        "data": {
-            "journeys": [
-                _serialize_journey(j, _patient_by_id(db, j.patient_id), pathway_names.get(j.pathway_id))
-                for j in journeys
-            ]
-        },
-    }
-
-
-def tool_get_journey_steps(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    args = _require_dict(args)
-    journey_id = _uuid(args.get("journey_id"), "journey_id")
-    journey = get_journey_scoped(journey_id, db, user)
-    rows = (
-        db.query(JourneyStep, PathwayStep)
-        .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
-        .filter(JourneyStep.journey_id == journey.id)
-        .order_by(PathwayStep.sequence_number)
-        .limit(100)
-        .all()
-    )
-    pathway = db.query(Pathway).filter(Pathway.id == journey.pathway_id).first()
-    return {
-        "tool": "get_journey_steps",
-        "summary": f"Journey {str(journey.id)[:8]} has {len(rows)} steps.",
-        "data": {
-            "journey": _serialize_journey(
-                journey,
-                _patient_by_id(db, journey.patient_id),
-                pathway.name if pathway else None,
-            ),
-            "steps": [_serialize_step(step, template) for step, template in rows],
-        },
-    }
-
-
-def tool_get_pending_tasks(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    """Open (pending/ready/in-progress/blocked) steps across the user's scope."""
-    args = _require_dict(args)
-    patient_id = _require_patient_id_in_scope(db, user, args) if (
-        user.role == "PATIENT" or args.get("patient_id")
-    ) else None
-
-    q = (
-        db.query(JourneyStep, PathwayStep, Journey)
-        .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
-        .join(Journey, JourneyStep.journey_id == Journey.id)
-        .filter(JourneyStep.status.in_(("PENDING", "READY", "IN_PROGRESS", "BLOCKED")))
-    )
-    if patient_id is not None:
-        q = q.filter(Journey.patient_id == patient_id)
-    else:
-        ids = scope_patient_ids(db, user)
-        if ids is not None:
-            q = q.filter(Journey.patient_id.in_(ids))
-    rows = q.order_by(Journey.updated_at.desc(), PathwayStep.sequence_number).limit(100).all()
-
-    pathway_names = _pathway_name_map(db, {journey.pathway_id for _, _, journey in rows})
-    patient_ids = {journey.patient_id for _, _, journey in rows}
-    patient_names = {
-        p.id: _patient_name(p)
-        for p in db.query(Patient).filter(Patient.id.in_(patient_ids)).all()
-    } if patient_ids else {}
-
-    by_journey: dict[str, dict[str, Any]] = {}
-    for step, template, journey in rows:
-        entry = by_journey.setdefault(
-            str(journey.id),
-            {
-                "journey_id": str(journey.id),
-                "patient_name": patient_names.get(journey.patient_id),
-                "pathway_name": pathway_names.get(journey.pathway_id),
-                "tasks": [],
-            },
-        )
-        entry["tasks"].append(_serialize_step(step, template))
-
-    total = sum(len(e["tasks"]) for e in by_journey.values())
-    return {
-        "tool": "get_pending_tasks",
-        "summary": f"{total} open task(s) across {len(by_journey)} journey(s).",
-        "data": {"journeys": list(by_journey.values())},
-    }
-
-
-# ---------------------------------------------------------------------------
-# Action tools — require_confirmation, executed only after user confirmation.
-# ---------------------------------------------------------------------------
-
-def tool_start_pathway(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    """
-    Start a pathway journey for a patient. Staff-only; runs the same service
-    function as POST /patients/{id}/journeys so business rules are identical.
-    """
-    args = _require_dict(args)
-    _staff_required(user)
-    patient_id = _uuid(args.get("patient_id"), "patient_id")
-    pathway_id = _uuid(args.get("pathway_id"), "pathway_id")
-    priority = _enum(args.get("priority", "MEDIUM"), ("CRITICAL", "HIGH", "MEDIUM", "LOW"), "priority")
-
-    patient = _patient_in_scope(db, user, patient_id)
-    journey = start_journey_for_patient(db, patient_id, pathway_id, priority)
-    db.commit()
-    db.refresh(journey)
-
-    pathway = db.query(Pathway).filter(Pathway.id == pathway_id).first()
-    next_steps = [
-        template.name
-        for template in pathway_steps(db, pathway_id)[:3]
-    ]
-    return {
-        "tool": "start_pathway",
-        "summary": (
-            f"{pathway.name if pathway else 'Pathway'} started successfully for "
-            f"{_patient_name(patient)}."
-        ),
-        "data": {
-            "journey": _serialize_journey(
-                journey, patient,
-                pathway.name if pathway else None,
-            ),
-            "next_steps": next_steps,
-        },
-    }
-
-
-def tool_submit_event(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    args = _require_dict(args)
-    journey_id = _uuid(args.get("journey_id"), "journey_id")
-    event_type = _text(args.get("event_type"), "event_type", max_len=100).upper()
-    comment = _text(args.get("comment", ""), "comment", max_len=4000)
-
-    allowed_types = {"SYMPTOM_REPORTED", "APPOINTMENT_PREFERENCE", "DOCUMENT_UPLOADED", "GENERAL_UPDATE", "QUESTION_ASKED",
-                     "MEDICATION_TAKEN", "VITALS_RECORDED", "ATTENDANCE_CONFIRMED", "TASK_COMPLETED", "STATUS_REPORT"}
-    if event_type not in allowed_types:
-        raise ToolValidationError(
-            "event_type must be one of: " + ", ".join(sorted(allowed_types))
-        )
-
-    if user.role == "PATIENT":
-        # Same guarantees as POST /me/journeys/{id}/events.
-        patient_id = get_owned_patient(user)
-        journey = db.query(Journey).filter(Journey.id == journey_id).first()
-        if not journey or journey.patient_id != patient_id:
-            raise ToolValidationError("Journey not found among your journeys")
-        source = "patient-portal"
-    elif user.role in STAFF_ROLES:
-        # Staff go through the same path as POST /journeys/{id}/events.
-        journey = get_journey_for_action(journey_id, db, user)
-        source = "carepath-ui"
-    else:
-        raise ToolValidationError("Role cannot submit events")
-
-    from app.orchestration.event_processor import EventProcessor
-    event, _result = EventProcessor(db).ingest(
-        journey.id, event_type, source, datetime.now(timezone.utc), {"comment": comment}, None
-    )
-    return {
-        "tool": "submit_event",
-        "summary": (
-            f"Recorded a {event_type} event on journey {str(journey.id)[:8]} "
-            f"({source})."
-        ),
-        "data": {
-            "event_id": str(event.id),
-            "event_type": event.event_type,
-            "source": event.source,
-            "journey_id": str(journey.id),
-        },
-    }
-
-
-def tool_orchestrate_journey(db: Session, user: User, args: dict[str, Any]) -> dict[str, Any]:
-    args = _require_dict(args)
-    journey_id = _uuid(args.get("journey_id"), "journey_id")
-    journey = get_journey_for_action(journey_id, db, user)
-    from app.orchestration.journey_engine import JourneyEngine
-    result = JourneyEngine(db).evaluate(journey.id)
-    if not result:
-        raise ToolValidationError("Journey not found")
-    db.commit()
-    db.refresh(result["journey"])
-    return {
-        "tool": "orchestrate_journey",
-        "summary": f"Re-evaluated journey {str(journey.id)[:8]}.",
-        "data": {
-            "journey_id": str(journey.id),
-            "status": (result["journey"].status or "").lower(),
-            "steps_updated": len(result.get("steps", [])),
-        },
-    }
-
-
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-
-TOOL_NAMES = (
-    "search_patients", "get_patient_summary", "list_pathways",
-    "list_journeys", "get_journey_steps", "get_pending_tasks",
-    "start_pathway", "submit_event", "orchestrate_journey",
-)
-
-TOOL_EXECUTORS = {
-    "search_patients": tool_search_patients,
-    "get_patient_summary": tool_get_patient_summary,
-    "list_pathways": tool_list_pathways,
-    "list_journeys": tool_list_journeys,
-    "get_journey_steps": tool_get_journey_steps,
-    "get_pending_tasks": tool_get_pending_tasks,
-    "start_pathway": tool_start_pathway,
-    "submit_event": tool_submit_event,
-    "orchestrate_journey": tool_orchestrate_journey,
-}
-
-# Two-step confirmation: the assistant proposes, the user confirms in chat,
-# only then the executor runs.
-TOOLS_REQUIRING_CONFIRMATION = {"start_pathway", "submit_event", "orchestrate_journey"}
-
-READ_ONLY_TOOLS = set(TOOL_NAMES) - TOOLS_REQUIRING_CONFIRMATION
-
-# Tools each role may propose. Patients get a patient-safe subset; staff get
-# everything. Validation of *ownership* happens at execution time regardless.
-ROLE_TOOL_ALLOWLIST: dict[str, tuple[str, ...]] = {
-    "PATIENT": (
-        "list_journeys", "get_journey_steps", "get_patient_summary",
-        "get_pending_tasks", "submit_event",
-    ),
-    "ADMIN": TOOL_NAMES,
-    "CLINICIAN": TOOL_NAMES,
-    "CARE_COORDINATOR": TOOL_NAMES,
-}
-
-
-def describe_action(db: Session, user: User, name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """
-    Human-readable confirmation-card data for a pending action. Best-effort:
-    description failures never block the action itself (raw ids are shown
-    as fallback in the UI).
-    """
-    description: dict[str, Any] = {"title": name.replace("_", " ").capitalize(), "changes": []}
-    try:
-        if name == "start_pathway":
-            pathway = (
-                db.query(Pathway).filter(Pathway.id == UUID(str(args.get("pathway_id")))).first()
-                if args.get("pathway_id") else None
-            )
-            patient = _patient_by_id(db, UUID(str(args.get("patient_id")))) if args.get("patient_id") else None
-            n_steps = len(pathway_steps(db, pathway.id)) if pathway else 0
-            description.update({
-                "title": f"Start {pathway.name}" if pathway else "Start pathway",
-                "patient": _patient_name(patient),
-                "patient_reference": patient.patient_reference if patient else None,
-                "pathway": pathway.name if pathway else None,
-                "priority": (args.get("priority") or "MEDIUM"),
-                "changes": [
-                    "Create the journey",
-                    f"Initialize {n_steps} pathway stage{'s' if n_steps != 1 else ''}",
-                    "Create the initial pending tasks",
-                    "Set the journey status to Active",
-                ],
-            })
-        elif name == "submit_event":
-            journey = (
-                db.query(Journey).filter(Journey.id == UUID(str(args.get("journey_id")))).first()
-                if args.get("journey_id") else None
-            )
-            event_type = str(args.get("event_type") or "").replace("_", " ").lower()
-            changes = [f"Record a {event_type or 'general'} event on the journey"]
-            if args.get("comment"):
-                changes.append(f"Attach note: \"{str(args['comment'])[:160]}\"")
-            description.update({
-                "title": "Record an update",
-                "patient": _patient_name(_patient_by_id(db, journey.patient_id)) if journey else None,
-                "changes": changes,
-            })
-        elif name == "orchestrate_journey":
-            description.update({
-                "title": "Re-evaluate journey",
-                "changes": [
-                    "Re-run the deterministic journey rules",
-                    "Refresh step statuses, due dates and blockers",
-                ],
-            })
-    except Exception:  # noqa: BLE001 — description is cosmetic only
-        pass
-    return description
-
-
-# OpenAI-compatible tool schemas handed to the LLM (subset per request role).
-OPENAI_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_patients",
-            "description": (
-                "Search patients by first/last name or reference id. Use this to "
-                "resolve a patient mentioned by name before acting on them. If "
-                "several patients match, ask the user which one they mean."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}},
-                "required": ["query"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_patient_summary",
-            "description": "Get a patient's identity and their journeys (with statuses).",
-            "parameters": {
-                "type": "object",
-                "properties": {"patient_id": {"type": "string"}},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_pathways",
-            "description": "List the active care pathway templates and their steps.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "list_journeys",
-            "description": "List journeys visible to the current user (most recent first).",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_journey_steps",
-            "description": "Get the steps (and their statuses) of one journey.",
-            "parameters": {
-                "type": "object",
-                "properties": {"journey_id": {"type": "string"}},
-                "required": ["journey_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_pending_tasks",
-            "description": (
-                "Get open tasks (pending/ready/in-progress/blocked steps) for a "
-                "patient's journeys, or across your whole scope."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"patient_id": {"type": "string"}},
-                "required": [],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "start_pathway",
-            "description": (
-                "Start an active care pathway for a patient: creates the journey, "
-                "initializes its stages and pending tasks. Requires the patient_id "
-                "and pathway_id (resolve them with search_patients / list_pathways "
-                "first). Requires confirmation before it is applied."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "patient_id": {"type": "string"},
-                    "pathway_id": {"type": "string"},
-                    "priority": {
-                        "type": "string",
-                        "description": "One of CRITICAL, HIGH, MEDIUM, LOW (default MEDIUM).",
-                    },
-                },
-                "required": ["patient_id", "pathway_id"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "submit_event",
-            "description": (
-                "Submit an update/event on a patient journey (symptom report, "
-                "general update, question, appointment preference, etc.). "
-                "Requires confirmation before it is applied."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "journey_id": {"type": "string"},
-                    "event_type": {
-                        "type": "string",
-                        "description": "One of SYMPTOM_REPORTED, APPOINTMENT_PREFERENCE, "
-                        "DOCUMENT_UPLOADED, GENERAL_UPDATE, QUESTION_ASKED, MEDICATION_TAKEN, "
-                        "VITALS_RECORDED, ATTENDANCE_CONFIRMED, TASK_COMPLETED, STATUS_REPORT",
-                    },
-                    "comment": {"type": "string"},
-                },
-                "required": ["journey_id", "event_type", "comment"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "orchestrate_journey",
-            "description": (
-                "Re-run journey orchestration/evaluation for a journey. "
-                "Requires confirmation before it is applied."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"journey_id": {"type": "string"}},
-                "required": ["journey_id"],
-            },
-        },
-    },
+from app.models import ExceptionRecord, JourneyStep, Pathway, PathwayStep, User
+from app.services.journey_service import find_active_journey
+
+ALL_ROLES = ("PATIENT",) + STAFF_ROLES
+STAFF = STAFF_ROLES
+ADMIN = ("ADMIN",)
+PATIENT = ("PATIENT",)
+
+__all__ = [
+    "ToolPermissionError", "ToolValidationError", "TOOL_SPECS", "get_spec", "is_allowed",
+    "tools_for_llm", "toolRequiresConfirmation", "isReadOnlyTool", "missing_arguments",
+    "prepare_arguments", "describe_action", "execute_tool", "denial_message",
+    "missing_message", "role_capabilities",
 ]
 
 
-def tools_for_role(role: str) -> list[dict[str, Any]]:
-    allowed = ROLE_TOOL_ALLOWLIST.get(role, ())
-    return [t for t in OPENAI_TOOLS if t["function"]["name"] in allowed]
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    label: str                       # verb phrase used in user-facing messages
+    description: str
+    roles: tuple[str, ...]
+    executor: Callable[[Session, Any, dict[str, Any]], dict[str, Any]]
+    properties: dict[str, dict[str, Any]] = field(default_factory=dict)
+    required: tuple[str, ...] = ()
+    confirm: bool = False
+    # How to ask the user for each required parameter (plain language, no ids).
+    ask: dict[str, str] = field(default_factory=dict)
+
+
+def _s(description: str, **extra) -> dict[str, Any]:
+    return {"type": "string", "description": description, **extra}
+
+
+JOURNEY_ID = _s("Journey id (UUID). Get it from list_journeys / get_patient_summary.")
+PATIENT_ID = _s("Patient id (UUID). Resolve a name with search_patients first.")
+STEP_ID = _s("Journey step id (UUID). Get it from get_journey_steps.")
+PRIORITY = _s("One of CRITICAL, HIGH, MEDIUM, LOW (default MEDIUM).", enum=["CRITICAL", "HIGH", "MEDIUM", "LOW"])
+
+_STAFF_EVENTS = ", ".join(write.STAFF_EVENT_TYPES)
+_PATIENT_EVENTS = ", ".join(write.PATIENT_EVENT_TYPES)
+
+SPECS: tuple[ToolSpec, ...] = (
+    # ----- read -----------------------------------------------------------
+    ToolSpec(
+        "search_patients", "search the patient directory",
+        "Search patients by first/last name or reference id. Use it to resolve a patient mentioned by "
+        "name before acting on them. If several match, ask the user which one.",
+        STAFF, read.tool_search_patients,
+        {"query": _s("Name or patient reference to search for")}, ("query",),
+        ask={"query": "which patient (name or patient reference)"},
+    ),
+    ToolSpec(
+        "list_patients", "list patients",
+        "List patients in the user's scope (most recent first).",
+        STAFF, read.tool_list_patients,
+        {"limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "How many (default 20)"}},
+    ),
+    ToolSpec(
+        "get_patient_summary", "view a patient's summary",
+        "Get a patient's identity and their journeys. Patients get their own record; staff must pass patient_id.",
+        ALL_ROLES, read.tool_get_patient_summary,
+        {"patient_id": PATIENT_ID},
+    ),
+    ToolSpec(
+        "list_pathways", "list care pathways",
+        "List the active care pathway templates with their steps.",
+        STAFF, read.tool_list_pathways,
+    ),
+    ToolSpec(
+        "list_journeys", "list journeys",
+        "List journeys visible to the user (most recent first), optionally filtered.",
+        ALL_ROLES, read.tool_list_journeys,
+        {
+            "status": _s("ACTIVE, BLOCKED, COMPLETED or CANCELLED", enum=list(read.JOURNEY_STATUSES)),
+            "priority": _s("CRITICAL, HIGH, MEDIUM or LOW", enum=list(read.PRIORITIES)),
+            "patient_id": _s("Only this patient's journeys (staff only)."),
+        },
+    ),
+    ToolSpec(
+        "get_journey_steps", "view a journey's steps",
+        "Get the steps (and their statuses, owners, due dates) of one journey.",
+        ALL_ROLES, read.tool_get_journey_steps,
+        {"journey_id": JOURNEY_ID}, ("journey_id",),
+        ask={"journey_id": "which journey (patient name, pathway, or journey id)"},
+    ),
+    ToolSpec(
+        "get_journey_events", "view a journey's recent events",
+        "Get the most recent events/updates recorded on a journey.",
+        ALL_ROLES, read.tool_get_journey_events,
+        {"journey_id": JOURNEY_ID, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
+        ("journey_id",),
+        ask={"journey_id": "which journey (patient name, pathway, or journey id)"},
+    ),
+    ToolSpec(
+        "get_pending_tasks", "view open tasks",
+        "Get open tasks (pending/ready/in-progress/blocked steps) for one patient or the whole scope.",
+        ALL_ROLES, read.tool_get_pending_tasks,
+        {"patient_id": PATIENT_ID},
+    ),
+    ToolSpec(
+        "get_dashboard_summary", "view the dashboard figures",
+        "Get headline numbers: active/blocked journeys, open exceptions, pending steps, patient counts.",
+        STAFF, read.tool_get_dashboard_summary,
+    ),
+    ToolSpec(
+        "list_exceptions", "list exceptions",
+        "List workflow exceptions (alerts), optionally filtered by status or severity.",
+        STAFF, read.tool_list_exceptions,
+        {
+            "status": _s("OPEN, IN_PROGRESS, RESOLVED or DISMISSED", enum=list(read.EXCEPTION_STATUSES)),
+            "severity": _s("CRITICAL, HIGH, MEDIUM or LOW", enum=list(read.PRIORITIES)),
+        },
+    ),
+    ToolSpec(
+        "list_users", "view user accounts",
+        "List portal user accounts (find a user's id before changing their role or status).",
+        ADMIN, read.tool_list_users,
+        {
+            "role": _s("Filter by role", enum=list(write.ROLES)),
+            "search": _s("Name or email to search for"),
+        },
+    ),
+    ToolSpec(
+        "get_chat_audit", "view the chatbot audit trail",
+        "Show the latest chatbot audit entries (who proposed/confirmed/executed/was denied what).",
+        ADMIN, read.tool_get_chat_audit,
+        {"limit": {"type": "integer", "minimum": 1, "maximum": 25}},
+    ),
+    # ----- mutations (always confirmed by the user first) ------------------
+    ToolSpec(
+        "start_pathway", "start a care pathway for a patient",
+        "Start an active care pathway for a patient: creates the journey, its stages and pending tasks. "
+        "Requires user confirmation.",
+        STAFF, write.tool_start_pathway,
+        {"patient_id": PATIENT_ID, "pathway_id": _s("Pathway id (UUID). Get it from list_pathways."), "priority": PRIORITY},
+        ("patient_id", "pathway_id"), confirm=True,
+        ask={"patient_id": "which patient (name or patient reference)", "pathway_id": "which care pathway"},
+    ),
+    ToolSpec(
+        "submit_event", "record an update on a journey",
+        "Record an update/event on a journey (symptom report, general update, question, appointment "
+        f"preference, ...). Patients may use: {_PATIENT_EVENTS}. Staff may also use: "
+        f"{', '.join(write.STAFF_EVENT_TYPES[len(write.PATIENT_EVENT_TYPES):])}. Requires user confirmation.",
+        ALL_ROLES, write.tool_submit_event,
+        {"journey_id": JOURNEY_ID, "event_type": _s(f"One of {_STAFF_EVENTS}"), "comment": _s("The note to record")},
+        ("journey_id", "event_type", "comment"), confirm=True,
+        ask={
+            "journey_id": "which journey this update is for",
+            "event_type": "what kind of update this is (e.g. symptom report, general update, question)",
+            "comment": "what the update should say",
+        },
+    ),
+    ToolSpec(
+        "complete_step", "mark a journey step as completed",
+        "Mark a READY or IN_PROGRESS journey step as completed (staff confirmation). Enforces the step "
+        "owner's role. Requires user confirmation.",
+        STAFF, write.tool_complete_step,
+        {"journey_id": JOURNEY_ID, "step_id": STEP_ID}, ("journey_id", "step_id"), confirm=True,
+        ask={"journey_id": "which journey", "step_id": "which step to complete"},
+    ),
+    ToolSpec(
+        "submit_step_update", "report one of your tasks as done",
+        "Patient only: tell the care team you finished one of your own tasks, with a short note. "
+        "Requires user confirmation.",
+        PATIENT, write.tool_submit_step_update,
+        {"journey_id": JOURNEY_ID, "step_id": STEP_ID, "comment": _s("What you completed")},
+        ("journey_id", "step_id", "comment"), confirm=True,
+        ask={
+            "journey_id": "which journey the task belongs to",
+            "step_id": "which task you completed",
+            "comment": "a short note describing what you completed",
+        },
+    ),
+    ToolSpec(
+        "update_step_time_limit", "change a step's time limit",
+        "Change the time limit (hours) of a journey step. Requires user confirmation.",
+        STAFF, write.tool_update_step_time_limit,
+        {
+            "journey_id": JOURNEY_ID, "step_id": STEP_ID,
+            "time_limit_hours": {"type": "integer", "minimum": 1, "maximum": 8760, "description": "New limit in hours"},
+        },
+        ("journey_id", "step_id", "time_limit_hours"), confirm=True,
+        ask={
+            "journey_id": "which journey", "step_id": "which step",
+            "time_limit_hours": "the new time limit in hours",
+        },
+    ),
+    ToolSpec(
+        "orchestrate_journey", "re-evaluate a journey",
+        "Re-run journey orchestration/evaluation for a journey. Requires user confirmation.",
+        STAFF, write.tool_orchestrate_journey,
+        {"journey_id": JOURNEY_ID}, ("journey_id",), confirm=True,
+        ask={"journey_id": "which journey (patient name, pathway, or journey id)"},
+    ),
+    ToolSpec(
+        "update_exception", "update an exception",
+        "Change an exception's status (OPEN, IN_PROGRESS, RESOLVED, DISMISSED) with an optional note. "
+        "Requires user confirmation.",
+        STAFF, write.tool_update_exception,
+        {
+            "exception_id": _s("Exception id (UUID). Get it from list_exceptions."),
+            "status": _s("OPEN, IN_PROGRESS, RESOLVED or DISMISSED", enum=list(write.EXCEPTION_STATUSES)),
+            "recommended_action": _s("Optional note about the action taken"),
+        },
+        ("exception_id", "status"), confirm=True,
+        ask={"exception_id": "which exception", "status": "the new status (open, in progress, resolved or dismissed)"},
+    ),
+    ToolSpec(
+        "set_user_role", "change a user's role",
+        "Change a portal user's role. Requires user confirmation.",
+        ADMIN, write.tool_set_user_role,
+        {"user_id": _s("User id (UUID). Get it from list_users."), "role": _s("New role", enum=list(write.ROLES))},
+        ("user_id", "role"), confirm=True,
+        ask={"user_id": "which user (name or email)", "role": "the new role (admin, clinician, care coordinator or patient)"},
+    ),
+    ToolSpec(
+        "set_user_status", "activate or deactivate a user account",
+        "Activate (is_active=true) or deactivate (false) a portal user's account. Requires user confirmation.",
+        ADMIN, write.tool_set_user_status,
+        {"user_id": _s("User id (UUID). Get it from list_users."), "is_active": {"type": "boolean"}},
+        ("user_id", "is_active"), confirm=True,
+        ask={"user_id": "which user (name or email)", "is_active": "whether to activate or deactivate the account"},
+    ),
+    ToolSpec(
+        "create_pathway", "create a care pathway",
+        "Create a new care pathway template with ordered steps. Requires user confirmation.",
+        ADMIN, write.tool_create_pathway,
+        {
+            "code": _s("Short unique code, letters/numbers/_/-"),
+            "name": _s("Pathway name"),
+            "description": _s("Optional description"),
+            "steps": {
+                "type": "array",
+                "description": "Ordered steps",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "code": {"type": "string"},
+                        "step_type": {"type": "string", "description": "e.g. TASK, APPOINTMENT, FOLLOW_UP"},
+                        "owner_role": {"type": "string", "description": "PATIENT, CLINICIAN, CARE_COORDINATOR, ADMIN, AGENT or STAFF"},
+                        "time_limit_hours": {"type": "integer"},
+                    },
+                    "required": ["name", "time_limit_hours"],
+                },
+            },
+        },
+        ("code", "name", "steps"), confirm=True,
+        ask={
+            "code": "a short unique code for the pathway",
+            "name": "the pathway name",
+            "steps": "the steps (name and time limit in hours for each)",
+        },
+    ),
+)
+
+TOOL_SPECS: dict[str, ToolSpec] = {s.name: s for s in SPECS}
+
+
+# ---------------------------------------------------------------------------
+# Lookup / permission helpers
+# ---------------------------------------------------------------------------
+
+def get_spec(name: str) -> ToolSpec | None:
+    return TOOL_SPECS.get(name)
+
+
+def is_allowed(user, spec: ToolSpec) -> bool:
+    return user.role in spec.roles
 
 
 def toolRequiresConfirmation(name: str) -> bool:
-    return name in TOOLS_REQUIRING_CONFIRMATION
+    spec = TOOL_SPECS.get(name)
+    return bool(spec and spec.confirm)
 
 
 def isReadOnlyTool(name: str) -> bool:
-    return name in READ_ONLY_TOOLS
+    spec = TOOL_SPECS.get(name)
+    return bool(spec and not spec.confirm)
 
 
-def execute_tool(db: Session, user: User, name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Validate role + args, then run the tool with the user's authorization."""
-    if name not in TOOL_EXECUTORS:
+def role_capabilities(role: str) -> tuple[list[str], list[str]]:
+    """(things the role may do, things it may not do) as plain phrases."""
+    allowed = [s.label for s in SPECS if role in s.roles]
+    denied = [s.label for s in SPECS if role not in s.roles]
+    return allowed, denied
+
+
+def tools_for_llm() -> list[dict[str, Any]]:
+    """
+    Every tool is shown to the model whatever the user's role, so a request the
+    role may not make still reaches the server-side gate and gets the standard
+    "not permitted" answer instead of depending on the model to refuse.
+    """
+    tools = []
+    for s in SPECS:
+        who = "any signed-in user" if s.roles == ALL_ROLES else ", ".join(r.replace("_", " ").lower() for r in s.roles)
+        tools.append({
+            "type": "function",
+            "function": {
+                "name": s.name,
+                "description": f"{s.description} (Allowed roles: {who}.)",
+                "parameters": {"type": "object", "properties": s.properties, "required": list(s.required)},
+            },
+        })
+    return tools
+
+
+def denial_message(user, spec: ToolSpec | None, reason: str | None = None) -> str:
+    action = spec.label if spec else "do this"
+    role = user.role.replace("_", " ").lower()
+    text = f"You are not permitted to {action}. Your role ({role}) does not have access to this task."
+    if reason and reason not in text:
+        text += f" ({reason})"
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Missing-information handling
+# ---------------------------------------------------------------------------
+
+def _autofill(db: Session, user, spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
+    """A patient with exactly one journey does not need to name it."""
+    args = dict(args)
+    if user.role == "PATIENT" and "journey_id" in spec.properties and not args.get("journey_id") and user.patient_id:
+        from app.models import Journey
+
+        rows = db.query(Journey.id).filter(Journey.patient_id == user.patient_id).limit(2).all()
+        if len(rows) == 1:
+            args["journey_id"] = str(rows[0][0])
+    return args
+
+
+def missing_arguments(db: Session, user, spec: ToolSpec, args: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Returns (args with safe auto-fills, parameter names still missing)."""
+    args = _autofill(db, user, spec, args if isinstance(args, dict) else {})
+    missing = []
+    for name in spec.required:
+        value = args.get(name)
+        blank = value is None or (isinstance(value, str) and not value.strip()) or value == [] or value == {}
+        if blank:
+            missing.append(name)
+    return args, missing
+
+
+def _choices(db: Session, name: str) -> str | None:
+    if name == "pathway_id":
+        names = [p.name for p in db.query(Pathway).filter(Pathway.status == "ACTIVE").order_by(Pathway.name).all()]
+        return "Available pathways: " + ", ".join(names) + "." if names else None
+    return None
+
+
+def missing_message(db: Session, spec: ToolSpec, missing: list[str]) -> str:
+    asks = [spec.ask.get(m, m.replace("_", " ")) for m in missing]
+    if len(asks) == 1:
+        body = asks[0]
+    else:
+        body = "; ".join(f"({i}) {a}" for i, a in enumerate(asks, 1))
+    text = f"To {spec.label}, I still need to know: {body}. Could you tell me?"
+    hints = [h for h in (_choices(db, m) for m in missing) if h]
+    return text + (" " + " ".join(hints) if hints else "")
+
+
+# ---------------------------------------------------------------------------
+# Validation (dry run: nothing is written)
+# ---------------------------------------------------------------------------
+
+def _http_to_tool(exc: HTTPException) -> Exception:
+    detail = str(exc.detail)
+    if exc.status_code in (401, 403):
+        return ToolPermissionError(detail)
+    return ToolValidationError(detail)
+
+
+def _normalize(spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
+    clean: dict[str, Any] = {}
+    for name, prop in spec.properties.items():
+        value = args.get(name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        kind = prop.get("type")
+        if kind == "string" and name.endswith("_id"):
+            clean[name] = str(uuid_value(value, name))
+        elif kind == "string" and "enum" in prop:
+            clean[name] = enum_value(value, tuple(prop["enum"]), name)
+        elif kind == "string":
+            clean[name] = text_value(value, name, max_len=4000)
+        elif kind == "integer":
+            clean[name] = int_value(value, name, prop.get("minimum", 0), prop.get("maximum", 1_000_000))
+        elif kind == "boolean":
+            clean[name] = bool_value(value, name)
+        else:
+            clean[name] = value
+    return clean
+
+
+def _check_targets(db: Session, user, spec: ToolSpec, args: dict[str, Any]) -> None:
+    """Scope + business pre-checks for mutating tools, mirroring the REST rules."""
+    journey = None
+    if "journey_id" in args:
+        journey = readable_journey(db, user, uuid_value(args["journey_id"], "journey_id"))
+    if user.role != "PATIENT" and "patient_id" in args:
+        patient_in_scope(db, user, uuid_value(args["patient_id"], "patient_id"))
+
+    if "step_id" in args:
+        row = (
+            db.query(JourneyStep, PathwayStep)
+            .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+            .filter(JourneyStep.id == uuid_value(args["step_id"], "step_id"))
+            .first()
+        )
+        if not row or (journey is not None and row[0].journey_id != journey.id):
+            raise ToolValidationError("That step does not belong to this journey")
+        step, template = row
+        if spec.name == "complete_step":
+            if step.status not in ("READY", "IN_PROGRESS"):
+                raise ToolValidationError(
+                    f"Only ready or in-progress steps can be completed; this step is {(step.status or '').lower()}."
+                )
+            from app.api.v1.journeys import _check_step_completion_permission
+
+            try:
+                _check_step_completion_permission(db, journey, step, template, user)
+            except HTTPException as exc:
+                raise _http_to_tool(exc)
+        elif spec.name == "submit_step_update":
+            if (step.owner_role or template.owner_role) != "PATIENT":
+                raise ToolPermissionError("This task is not assigned to you")
+            if step.status not in ("READY", "IN_PROGRESS"):
+                raise ToolValidationError("This task is not currently open for an update")
+        elif spec.name == "update_step_time_limit" and step.status in ("COMPLETED", "CANCELLED"):
+            raise ToolValidationError("Time limits cannot be changed for completed or cancelled steps")
+
+    if spec.name == "start_pathway":
+        pathway = db.query(Pathway).filter(
+            Pathway.id == uuid_value(args["pathway_id"], "pathway_id"), Pathway.status == "ACTIVE"
+        ).first()
+        if not pathway:
+            raise ToolValidationError("That is not an active care pathway")
+        if find_active_journey(db, uuid_value(args["patient_id"], "patient_id"), pathway.id):
+            raise ToolValidationError("This patient already has an active journey for this pathway")
+    elif spec.name == "submit_event":
+        args["event_type"] = enum_value(args["event_type"], write.event_types_for(user), "event_type")
+    elif spec.name == "update_exception":
+        if not db.query(ExceptionRecord).filter(ExceptionRecord.id == uuid_value(args["exception_id"], "exception_id")).first():
+            raise ToolValidationError("Exception not found")
+    elif spec.name in ("set_user_role", "set_user_status"):
+        write._target_user(db, user, args["user_id"])
+    elif spec.name == "create_pathway":
+        payload = write.build_pathway_payload(args)
+        args["code"] = payload.code
+        if db.query(Pathway).filter(Pathway.code == payload.code).first():
+            raise ToolValidationError("A pathway with this code already exists")
+
+
+def prepare_arguments(db: Session, user, spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
+    """Normalize + validate LLM arguments. Raises ToolValidationError /
+    ToolPermissionError / HTTPException. Never writes."""
+    if not isinstance(args, dict):
+        raise ToolValidationError("Tool arguments must be a JSON object")
+    clean = _normalize(spec, args)
+    if spec.confirm:
+        try:
+            _check_targets(db, user, spec, clean)
+        except HTTPException as exc:
+            raise _http_to_tool(exc)
+    return clean
+
+
+# ---------------------------------------------------------------------------
+# Execution
+# ---------------------------------------------------------------------------
+
+def describe_action(db: Session, user, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    return write.describe_action(db, user, name, args)
+
+
+def execute_tool(db: Session, user, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Validate role, then run the tool with the user's own authorization."""
+    spec = TOOL_SPECS.get(name)
+    if spec is None:
         raise ToolValidationError(f"Unknown tool: {name}")
-    if name not in ROLE_TOOL_ALLOWLIST.get(user.role, ()):
-        raise ToolValidationError("Your role cannot use this action")
-    return TOOL_EXECUTORS[name](db, user, args)
+    if not is_allowed(user, spec):
+        raise ToolPermissionError("")
+    return spec.executor(db, user, args)

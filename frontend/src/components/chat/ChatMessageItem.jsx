@@ -12,6 +12,19 @@ const ROLE_LABELS = {
   orchestrate_journey: "Re-evaluate journey",
   list_journeys: "Look up journeys",
   get_journey_steps: "Look up journey steps",
+  list_patients: "Patients",
+  get_journey_events: "Journey events",
+  get_dashboard_summary: "Dashboard figures",
+  list_exceptions: "Exceptions",
+  list_users: "User accounts",
+  get_chat_audit: "Chatbot audit trail",
+  complete_step: "Complete a step",
+  submit_step_update: "Report a task",
+  update_step_time_limit: "Change a time limit",
+  update_exception: "Update an exception",
+  set_user_role: "Change a user's role",
+  set_user_status: "Change account status",
+  create_pathway: "Create a pathway",
 };
 
 const STATUS_DONE = new Set(["completed", "cancelled"]);
@@ -132,6 +145,68 @@ function StructuredData({ tool, data }) {
       </div>
     ));
   }
+  if (tool === "list_patients" && data.patients) {
+    return data.patients.map((p, i) => <PatientCard key={p.id || i} patient={p} />);
+  }
+  if (tool === "get_journey_events" && data.events) {
+    return data.events.map((e) => (
+      <div key={e.id} className="chat-journey-row">
+        <div className="chat-journey-main">
+          <strong>{(e.event_type || "").replace(/_/g, " ").toLowerCase()}</strong>
+          <span className="chat-muted">{[fmtDate(e.event_time), e.comment].filter(Boolean).join(" · ")}</span>
+        </div>
+      </div>
+    ));
+  }
+  if (tool === "get_dashboard_summary" && data.metrics) {
+    const m = data.metrics;
+    const rows = [
+      ["Active journeys", m.active_journeys], ["Blocked journeys", m.blocked_journeys],
+      ["Open exceptions", m.open_exceptions], ["Critical exceptions", m.critical_exceptions],
+      ["Pending steps", m.pending_steps], ["Patients", m.total_patients],
+    ];
+    return rows.map(([label, value]) => (
+      <div key={label} className="chat-journey-row">
+        <div className="chat-journey-main"><strong>{label}</strong></div>
+        <span className="chat-chip">{value ?? 0}</span>
+      </div>
+    ));
+  }
+  if (tool === "list_exceptions" && data.exceptions) {
+    return data.exceptions.map((e) => (
+      <div key={e.id} className="chat-journey-row">
+        <div className="chat-journey-main">
+          <strong>{e.title}</strong>
+          <span className="chat-muted">{e.severity} · {fmtDate(e.created_at)}</span>
+        </div>
+        <span className={chipClass(e.status === "open" ? "blocked" : e.status === "resolved" ? "completed" : e.status)}>
+          {(e.status || "").replace(/_/g, " ")}
+        </span>
+      </div>
+    ));
+  }
+  if (tool === "list_users" && data.users) {
+    return data.users.map((u) => (
+      <div key={u.id} className="chat-journey-row">
+        <div className="chat-journey-main">
+          <strong>{u.display_name}</strong>
+          <span className="chat-muted">{u.email} · {(u.role || "").replace(/_/g, " ").toLowerCase()}</span>
+        </div>
+        <span className={chipClass(u.is_active ? "active" : "cancelled")}>{u.is_active ? "active" : "inactive"}</span>
+      </div>
+    ));
+  }
+  if (tool === "get_chat_audit" && data.entries) {
+    return data.entries.map((a, i) => (
+      <div key={i} className="chat-journey-row">
+        <div className="chat-journey-main">
+          <strong>{a.tool} · {a.event}</strong>
+          <span className="chat-muted">{fmtDate(a.created_at)}{a.detail ? ` · ${a.detail}` : ""}</span>
+        </div>
+        <span className={chipClass(a.permission_result === "denied" ? "blocked" : "active")}>{a.permission_result}</span>
+      </div>
+    ));
+  }
   return null;
 }
 
@@ -147,6 +222,8 @@ function prettyArgs(args = {}) {
     return parts.join(" · ");
   }
   if (args.journey_id) return `journey ${String(args.journey_id).slice(0, 8)}`;
+  if (args.user_id) return `user ${String(args.user_id).slice(0, 8)}`;
+  if (args.exception_id) return `exception ${String(args.exception_id).slice(0, 8)}`;
   return "";
 }
 
@@ -172,12 +249,18 @@ export default function ChatMessageItem({ message, busy, onConfirm, onReject }) 
   const description = pending?.description || null;
   const showStructured = !pending && !actionResult && presentation.kind === "card";
   const showText = !pending && !actionResult && presentation.kind === "text";
+  const denied = Boolean(meta.permission_denied);
+  const needsInfo = Boolean(meta.needs_info);
+  const bubbleClass = `chat-bubble chat-bubble--assistant${denied ? " chat-bubble--denied" : ""}${needsInfo ? " chat-bubble--ask" : ""}`;
 
   return (
     <div className="chat-row chat-row--assistant">
       <div className="chat-avatar"><Wrench size={13} /></div>
       <div className="chat-bubble-group">
-        {showText && <div className="chat-bubble chat-bubble--assistant">{presentation.text}</div>}
+        {showText && <div className={bubbleClass}>
+          {denied && <Ban size={12} className="chat-bubble-icon" aria-hidden />}
+          {presentation.text}
+        </div>}
 
         {showStructured && <div className="chat-data-card">
           <div className="chat-data-label"><Wrench size={11} /> {humanizeTool(presentation.result.tool)}</div>
