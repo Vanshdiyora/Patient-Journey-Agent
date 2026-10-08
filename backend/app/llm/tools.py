@@ -227,8 +227,8 @@ SPECS: tuple[ToolSpec, ...] = (
         },
     ),
     ToolSpec(
-        "orchestrate_journey", "re-evaluate a journey",
-        "Re-run journey orchestration/evaluation for a journey. Requires user confirmation.",
+        "orchestrate_journey", "run orchestration for a patient journey",
+        "Run or re-evaluate journey orchestration for a patient journey. Requires user confirmation.",
         STAFF, write.tool_orchestrate_journey,
         {"journey_id": JOURNEY_ID}, ("journey_id",), confirm=True,
         ask={"journey_id": "which journey (patient name, pathway, or journey id)"},

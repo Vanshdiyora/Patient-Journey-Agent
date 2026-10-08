@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readResultPresentation } from "../src/components/chat/presentation.js";
+import { inlineInfoPrompt, readResultPresentation } from "../src/components/chat/presentation.js";
 
 const result = (tool, data, summary = "Tool summary") => ({
   tool, status: "ok", result: { data, summary },
@@ -39,4 +39,27 @@ test("empty tasks use tool summary when the assistant has no text", () => {
 
 test("ordinary answers remain normal text", () => {
   assert.deepEqual(readResultPresentation({ content: "Hello", meta: {} }), { kind: "text", text: "Hello" });
+});
+
+test("plain-text journey clarification shows the inline journey input", () => {
+  const message = {
+    role: "assistant",
+    content: "I'd be happy to help. Could you tell me which journey you mean?",
+    meta: {},
+  };
+  assert.deepEqual(inlineInfoPrompt(message), { missing: ["journey_id"] });
+});
+
+test("plain-text patient clarification shows the inline patient input", () => {
+  const message = { role: "assistant", content: "Which patient do you mean?", meta: {} };
+  assert.deepEqual(inlineInfoPrompt(message), { missing: ["patient_id"] });
+});
+
+test("ordinary replies and action cards do not show an inline information input", () => {
+  assert.equal(inlineInfoPrompt({ role: "assistant", content: "Here are the journeys.", meta: {} }), null);
+  assert.equal(inlineInfoPrompt({
+    role: "assistant",
+    content: "Which journey do you mean?",
+    meta: { pending_action: { status: "pending" } },
+  }), null);
 });

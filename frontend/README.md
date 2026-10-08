@@ -67,6 +67,13 @@ in `services/chat.js`. Backend authorization remains authoritative.
 - Patient portal: My Journey with Overview / Care plan / Updates tabs
 - Login / protected routes
 
+The chat widget loads older messages as the conversation is scrolled upward
+and more conversations as History is scrolled downward. It fetches batches of
+10 through the existing chat API and preserves the visible message when older
+messages arrive. Missing patient or journey details can be entered inline in
+the chat, and journey orchestration changes require an in-chat Confirm or
+Reject action before they run.
+
 ## Backend contract
 
 The UI follows the uploaded OpenAPI contract and calls `/api/v1/*`.
