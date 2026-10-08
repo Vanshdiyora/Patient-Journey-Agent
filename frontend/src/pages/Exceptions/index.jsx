@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { exceptionsApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { formatDate, getErrorMessage, humanize, severityClass, toList } from "../../utils";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, FilterSelect, ResultCount, SkeletonRows } from "../../components";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, FilterSelect, ResultCount, SkeletonRows, Pagination } from "../../components";
 import { useConfirm } from "../../components/ConfirmModal";
 import { useToast } from "../../context/ToastContext";
 import { STATUS_OPTIONS, SEVERITY_OPTIONS } from "./filters";
@@ -13,12 +13,13 @@ export default function Exceptions() {
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [saving, setSaving] = useState("");
   const [confirm, confirmModal] = useConfirm();
   const toast = useToast();
   const { data, loading, error } = useAsync(
-    () => exceptionsApi.list({ status: status || undefined, severity: severity || undefined, limit: 100 }),
-    [status, severity, refreshKey]
+    () => exceptionsApi.list({ status: status || undefined, severity: severity || undefined, limit: 10, offset }),
+    [status, severity, offset, refreshKey]
   );
   const rows = toList(data, "items", "exceptions");
 
@@ -34,7 +35,8 @@ export default function Exceptions() {
     try {
       await exceptionsApi.update(e.id, { status: "resolved", recommended_action: e.recommended_action });
       toast.success("Exception resolved.");
-      setRefreshKey(x => x + 1);
+      if (rows.length === 1 && offset > 0 && status && !status.toLowerCase().includes("resolved")) setOffset(offset - 10);
+      else setRefreshKey(x => x + 1);
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -47,10 +49,10 @@ export default function Exceptions() {
     <Panel>
       <div className="toolbar">
         <div className="filter-group">
-          <FilterSelect label="All statuses" value={status} onChange={setStatus} options={STATUS_OPTIONS} />
-          <FilterSelect label="All severity" value={severity} onChange={setSeverity} options={SEVERITY_OPTIONS} />
+          <FilterSelect label="All statuses" value={status} onChange={v => { setStatus(v); setOffset(0); }} options={STATUS_OPTIONS} />
+          <FilterSelect label="All severity" value={severity} onChange={v => { setSeverity(v); setOffset(0); }} options={SEVERITY_OPTIONS} />
         </div>
-        <ResultCount icon={AlertTriangle}>{rows.length} exceptions</ResultCount>
+        <ResultCount icon={AlertTriangle}>{data?.total ?? rows.length} exceptions</ResultCount>
       </div>
       {error ? <ErrorState error={error} title="Could not load exceptions" /> :
         loading ? <SkeletonRows /> :
@@ -81,6 +83,7 @@ export default function Exceptions() {
               </article>
             ))}</div>
           ) : <EmptyState icon={CheckCircle2} title="No exceptions" text="No exceptions match the selected filters." />}
+      {!loading && !error && <Pagination offset={offset} count={rows.length} total={data?.total ?? 0} onPage={setOffset} />}
     </Panel>
     {confirmModal}
   </div>;

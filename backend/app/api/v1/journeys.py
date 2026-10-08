@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID, uuid4
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -19,11 +21,17 @@ from app.models import Journey, JourneyStep, Patient, PatientEvent, Pathway, Pat
 from app.schemas import JourneyResponse, JourneyStepResponse, OrchestrationResponse
 from app.schemas.journey import JourneyStepComplete, JourneyStepTimeLimitUpdate
 from app.orchestration.journey_engine import JourneyEngine
+from app.orchestration.event_processor import EventProcessor
 from app.orchestration.langgraph_supervisor import OrchestrationFailure, SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
 from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
 from app.rules.journey_rule_engine import JourneyRuleEngine
 from app.services.journey_service import sync_journey_to_active_pathway
+from app.services.step_evidence_storage import (
+    EvidenceFileError,
+    evidence_file_path,
+    save_evidence_file,
+)
 
 router = APIRouter()
 
@@ -96,7 +104,7 @@ def _with_patient_names(db: Session, journeys: list[Journey]) -> list[dict]:
 def list_journeys(
     status: str | None = None,
     priority: str | None = None,
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(10, ge=1, le=10),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(require_staff),
@@ -112,7 +120,7 @@ def list_journeys(
     if priorities:
         q = q.filter(Journey.priority.in_(priorities))
     total = q.with_entities(func.count()).scalar() or 0
-    items = q.order_by(Journey.updated_at.desc()).offset(offset).limit(limit).all()
+    items = q.order_by(Journey.updated_at.desc(), Journey.id.desc()).offset(offset).limit(limit).all()
     return {
         "items": _with_patient_names(db, items),
         "total": total,
@@ -315,6 +323,141 @@ def update_step_time_limit(
     db.commit()
     db.refresh(step)
     return steps_with_pathway_details(db, journey_id)
+
+
+@router.post("/journeys/{journey_id}/steps/{step_id}/evidence", status_code=201)
+def add_step_evidence(
+    journey_id: UUID,
+    step_id: UUID,
+    details: str = Form(default="", max_length=4000),
+    evidence_type: str = Form(default="RESULT"),
+    approval_confirmed: bool = Form(default=False),
+    file: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    user=Depends(require_staff),
+):
+    journey = get_journey_scoped(journey_id, db, user)
+    step_row = (
+        db.query(JourneyStep, PathwayStep)
+        .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+        .filter(JourneyStep.id == step_id, JourneyStep.journey_id == journey_id)
+        .first()
+    )
+    if not step_row:
+        raise HTTPException(404, "Journey step not found")
+    step, pathway_step = step_row
+    if step.status not in {"READY", "IN_PROGRESS", "BLOCKED"}:
+        raise HTTPException(409, "Evidence can only be added to an active journey step.")
+    if evidence_type not in {"RESULT", "APPROVAL"}:
+        raise HTTPException(422, "Evidence type must be RESULT or APPROVAL.")
+    expected_evidence_type = (
+        "APPROVAL"
+        if step.block_reason == "Required approval evidence is missing"
+        else "RESULT"
+    )
+    if step.status == "BLOCKED" and step.block_reason not in {
+        "Required result evidence is missing",
+        "Required approval evidence is missing",
+    }:
+        raise HTTPException(409, "This step is blocked for a reason that evidence submission cannot resolve.")
+    if evidence_type != expected_evidence_type:
+        raise HTTPException(409, "Evidence type does not match this step's current requirement.")
+    if not details.strip() and file is None:
+        raise HTTPException(422, "Enter evidence details or attach a file.")
+    if evidence_type == "APPROVAL" and not approval_confirmed:
+        raise HTTPException(422, "Confirm that the required approval has actually been received.")
+
+    owner_role = str(step.owner_role or pathway_step.owner_role or "STAFF").upper()
+    allowed_roles = {
+        "CLINICIAN": {"CLINICIAN"},
+        "CARE_COORDINATOR": {"CARE_COORDINATOR"},
+        "ADMIN": {"ADMIN"},
+        "STAFF": STAFF_ROLES,
+    }
+    if str(user.role).upper() not in allowed_roles.get(owner_role, set()):
+        raise HTTPException(403, f"This step is assigned to {owner_role.lower().replace('_', ' ')} staff.")
+
+    file_id = None
+    file_name = None
+    file_size = None
+    if file is not None:
+        try:
+            file_id, file_name, file_size = save_evidence_file(file)
+        except EvidenceFileError as exc:
+            raise HTTPException(422, str(exc))
+        finally:
+            file.file.close()
+
+    payload = {
+        "journey_step_id": str(step.id),
+        "step_code": pathway_step.code,
+        "details": details.strip(),
+    }
+    event_type = "STEP_EVIDENCE_RECORDED"
+    if evidence_type == "APPROVAL":
+        payload["approved"] = True
+        event_type = "STEP_APPROVAL_EVIDENCE_RECORDED"
+    else:
+        payload["result_available"] = True
+    if file_id is not None:
+        payload["file_id"] = str(file_id)
+        payload["file_name"] = file_name
+        payload["file_size_bytes"] = file_size
+        payload["download_url"] = f"/api/v1/journeys/{journey_id}/steps/{step_id}/evidence/{file_id}"
+
+    try:
+        event, _ = EventProcessor(db).ingest(
+            journey.id,
+            event_type,
+            "carepath-step-evidence",
+            datetime.now(timezone.utc),
+            payload,
+        )
+    except Exception:
+        db.rollback()
+        if file_id is not None:
+            evidence_file_path(file_id).unlink(missing_ok=True)
+        raise
+    return {
+        "event_id": str(event.id),
+        "step_id": str(step.id),
+        "status": db.query(JourneyStep).filter(JourneyStep.id == step.id).one().status,
+        "file_name": file_name,
+        "file_size_bytes": file_size,
+    }
+
+
+@router.get("/journeys/{journey_id}/steps/{step_id}/evidence/{file_id}")
+def download_step_evidence(
+    journey_id: UUID,
+    step_id: UUID,
+    file_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(require_staff),
+):
+    get_journey_scoped(journey_id, db, user)
+    event = (
+        db.query(PatientEvent)
+        .filter(
+            PatientEvent.journey_id == journey_id,
+            PatientEvent.event_type.in_(
+                {"STEP_EVIDENCE_RECORDED", "STEP_APPROVAL_EVIDENCE_RECORDED"}
+            ),
+            PatientEvent.payload["journey_step_id"].astext == str(step_id),
+            PatientEvent.payload["file_id"].astext == str(file_id),
+        )
+        .first()
+    )
+    if not event:
+        raise HTTPException(404, "Evidence file not found")
+    path = evidence_file_path(file_id)
+    if not path.is_file():
+        raise HTTPException(404, "Evidence file is missing from storage")
+    return FileResponse(
+        path,
+        filename=Path(str(event.payload.get("file_name") or "evidence")).name,
+        media_type="application/octet-stream",
+    )
 
 
 @router.post("/journeys/{journey_id}/evaluate")

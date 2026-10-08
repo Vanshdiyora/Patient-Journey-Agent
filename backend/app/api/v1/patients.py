@@ -44,7 +44,7 @@ def _apply_directory_filter(q, db: Session, filter_key: str | None):
 def list_patients(
     search: str | None = None,
     filter: str | None = Query(None, description=f"One of: {', '.join(VALID_FILTERS)}"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(10, ge=1, le=10),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(require_staff),
@@ -65,7 +65,7 @@ def list_patients(
         )
     total = q.order_by(None).count()
     return {
-        "items": q.order_by(Patient.created_at.desc()).offset(offset).limit(limit).all(),
+        "items": q.order_by(Patient.created_at.desc(), Patient.id.desc()).offset(offset).limit(limit).all(),
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -87,20 +87,16 @@ def get_patient(patient_id: UUID, db: Session = Depends(get_db), user=Depends(re
     return item
 
 
-@router.get("/patients/{patient_id}/journeys", response_model=list[JourneyResponse])
-def patient_journeys(patient_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
+@router.get("/patients/{patient_id}/journeys")
+def patient_journeys(patient_id: UUID, limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user=Depends(require_staff)):
     if not db.query(Patient).filter(Patient.id == patient_id).first():
         raise HTTPException(404, "Patient not found")
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None and patient_id not in patient_ids:
         raise HTTPException(404, "Patient not found")
-    journeys = (
-        db.query(Journey)
-        .filter(Journey.patient_id == patient_id)
-        .order_by(Journey.started_at.desc())
-        .all()
-    )
-    return journeys_with_pathways(db, journeys)
+    q = db.query(Journey).filter(Journey.patient_id == patient_id)
+    journeys = q.order_by(Journey.started_at.desc(), Journey.id.desc()).offset(offset).limit(limit).all()
+    return {"items": journeys_with_pathways(db, journeys), "total": q.count(), "limit": limit, "offset": offset}
 
 
 @router.post("/patients/{patient_id}/journeys", response_model=JourneyResponse, status_code=201)

@@ -1,5 +1,10 @@
 import axios from "axios";
 
+const apiTimeoutMs = Number(import.meta.env.VITE_API_TIMEOUT_MS);
+if (!Number.isFinite(apiTimeoutMs) || apiTimeoutMs <= 0) {
+  throw new Error("VITE_API_TIMEOUT_MS must be set to a positive number of milliseconds.");
+}
+
 /**
  * The single axios instance for the app. Resource modules (auth.js,
  * patients.js, ...) import `api` from here and never build their own clients,
@@ -8,7 +13,7 @@ import axios from "axios";
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000",
   headers: { "Content-Type": "application/json" },
-  timeout: 600000,
+  timeout: apiTimeoutMs,
 });
 
 api.interceptors.request.use((config) => {

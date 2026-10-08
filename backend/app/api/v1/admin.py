@@ -44,7 +44,7 @@ def _serialize(u: User) -> dict:
 def list_users(
     role: str | None = None,
     search: str | None = None,
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=10),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
@@ -58,7 +58,7 @@ def list_users(
         term = f"%{search}%"
         q = q.filter(User.email.ilike(term) | User.display_name.ilike(term))
     total = q.order_by(None).count()
-    items = q.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+    items = q.order_by(User.created_at.desc(), User.id.desc()).offset(offset).limit(limit).all()
     return {"items": [_serialize(u) for u in items], "total": total, "limit": limit, "offset": offset}
 
 

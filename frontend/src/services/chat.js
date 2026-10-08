@@ -8,8 +8,8 @@ import api, { get, post, patch } from "./client";
 
 export const chatApi = {
   createSession: (title) => post("/api/v1/chat/sessions", title ? { title } : {}),
-  listSessions: () => get("/api/v1/chat/sessions"),
-  messages: (sessionId) => get(`/api/v1/chat/sessions/${sessionId}/messages`),
+  listSessions: (params) => get("/api/v1/chat/sessions", params),
+  messages: (sessionId, params) => get(`/api/v1/chat/sessions/${sessionId}/messages`, params),
   renameSession: (sessionId, title) => patch(`/api/v1/chat/sessions/${sessionId}`, { title }),
   archiveSession: (sessionId) => api.delete(`/api/v1/chat/sessions/${sessionId}`).then(r => r.data),
 };

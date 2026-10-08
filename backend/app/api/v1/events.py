@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -21,19 +21,18 @@ STEP_COMPLETION_EVENT_TYPES = {
     "APPOINTMENT_COMPLETED",
     "LAB_RESULT_AVAILABLE",
     "DISCHARGE_COMPLETED",
+    "STEP_EVIDENCE_RECORDED",
+    "STEP_APPROVAL_EVIDENCE_RECORDED",
 }
 
 
-@router.get("/journeys/{journey_id}/events", response_model=list[EventResponse])
-def events(journey_id: UUID, limit: int = 100, db: Session = Depends(get_db), user=Depends(require_staff)):
+@router.get("/journeys/{journey_id}/events")
+def events(journey_id: UUID, limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user=Depends(require_staff)):
     get_journey_scoped(journey_id, db, user)
-    return (
-        db.query(PatientEvent)
-        .filter(PatientEvent.journey_id == journey_id)
-        .order_by(PatientEvent.event_time.desc())
-        .limit(min(max(limit, 1), 500))
-        .all()
-    )
+    q = db.query(PatientEvent).filter(PatientEvent.journey_id == journey_id)
+    items = q.order_by(PatientEvent.event_time.desc(), PatientEvent.id.desc()).offset(offset).limit(limit).all()
+    return {"items": [EventResponse.model_validate(item).model_dump(mode="json") for item in items],
+            "total": q.order_by(None).count(), "limit": limit, "offset": offset}
 
 
 @router.post("/journeys/{journey_id}/events", response_model=EventResponse, status_code=201)
@@ -47,6 +46,7 @@ def add_event(journey_id: UUID, data: EventCreate, db: Session = Depends(get_db)
         data.event_type in STEP_COMPLETION_EVENT_TYPES
         or "verified" in data.payload
         or data.payload.get("step_completed") is True
+        or data.payload.get("result_available") is True
     ):
         raise HTTPException(
             422,

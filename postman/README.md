@@ -9,7 +9,7 @@ For Insomnia, import the native v5 YAML file `Patient-Journey-Orchestrator.insom
 1. Start PostgreSQL and confirm the local database contains the schema and seed data. For a fresh database, use the SQL commands in `backend/README.md`.
 2. Ensure the patient portal migration and `backend/scripts/seed_demo_patient_portal.py` have been run if you want to use the four dedicated patient demo users. Run the script from `backend`.
 3. Start FastAPI on port 8000 and check `GET http://localhost:8000/api/v1/health` returns `status: ok` and `database: connected`.
-4. Configure `MAQ_AI_ENABLED=true` and a valid `MAQ_AI_API_KEY` in `backend/.env` for agent orchestration and chat. Restart the backend after changing environment values. Without an available LLM, normal REST endpoints work, but orchestration/chat can fail.
+4. For agent orchestration and chat, configure the provider through `MAQ_AI_*` environment variables in `backend/.env` or your deployment secret store, then restart the backend. AI is disabled when `MAQ_AI_ENABLED` is unset or false. Without an available LLM, normal REST endpoints work, but orchestration/chat can fail.
 5. In Postman, set `clinicianEmail`, `coordinatorEmail`, and `adminEmail` collection variables to accounts whose roles match those names. The active local seed JSON is `db/users_and_patients.json`; use a plain email value.
 
 ## Recommended sequence

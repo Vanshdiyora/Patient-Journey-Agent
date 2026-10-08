@@ -111,7 +111,7 @@ code{font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#5f6f6b;bac
 @keyframes select-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 .result-count{display:flex;align-items:center;gap:6px;color:#82908d;font-size:10px}
 .pagination{border-top:1px solid var(--line);padding:11px 18px;display:flex;justify-content:space-between;align-items:center;color:#899592;font-size:10px}
-.pagination div{display:flex;gap:6px}
+.pagination div{display:flex;align-items:center;gap:6px}
 
 /* Portal page tabs (My Journey / Patients). */
 .tab-bar{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}

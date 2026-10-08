@@ -5,12 +5,13 @@ import { useAsync } from "../../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../../utils";
 import { useConfirm } from "../../components/ConfirmModal";
 import { useToast } from "../../context/ToastContext";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner, Select } from "../../components";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner, Select, Pagination } from "../../components";
 import { ROLES } from "../../utils/roles";
 
 export default function UserManagement() {
   const [refreshKey, setRefreshKey] = useState(0);
-  const { data, loading, error } = useAsync(() => adminApi.users(), [refreshKey]);
+  const [offset, setOffset] = useState(0);
+  const { data, loading, error } = useAsync(() => adminApi.users({ limit: 10, offset }), [refreshKey, offset]);
   const users = toList(data, "items", "users");
   const [saving, setSaving] = useState("");
   const [feedback, setFeedback] = useState(null);
@@ -70,7 +71,7 @@ export default function UserManagement() {
       title="User management"
       description="Manage application identities, roles and activation status."
     />
-    <Panel title="Application users" subtitle={`${users.length} registered identities`} headerIcon={UserCog}>
+    <Panel title="Application users" subtitle={`${data?.total ?? users.length} registered identities`} headerIcon={UserCog}>
       {feedback && <div style={{ padding: "0 18px" }}><AlertBanner tone={feedback.tone}>{feedback.text}</AlertBanner></div>}
       {error ? <ErrorState error={error} title="Could not load users" /> :
         loading ? <SkeletonRows /> :
@@ -102,6 +103,7 @@ export default function UserManagement() {
               ))}</tbody>
             </table></div>
           ) : <EmptyState icon={ShieldCheck} title="No users" text="No identities are registered yet." />}
+      {!loading && !error && <Pagination offset={offset} count={users.length} total={data?.total ?? 0} onPage={setOffset} />}
     </Panel>
     {confirmModal}
   </div>;

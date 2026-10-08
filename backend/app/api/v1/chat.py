@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.authorization import require_admin
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models import User
+from app.models import User, ChatSession, ChatMessage, ChatAuditLog
 from app.services import chat_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -92,21 +92,28 @@ def create_session(
 
 @router.get("/sessions")
 def list_sessions(
+    limit: int = Query(10, ge=1, le=10),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    return {"items": [_session_out(s) for s in chat_service.list_sessions(db, user)]}
+    total = db.query(ChatSession).filter(ChatSession.user_id == user.id, ChatSession.is_archived.is_(False)).count()
+    return {"items": [_session_out(s) for s in chat_service.list_sessions(db, user, limit, offset)],
+            "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/sessions/{session_id}/messages")
 def get_messages(
     session_id: UUID,
-    limit: int = Query(200, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=10),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows = chat_service.get_messages(db, user, session_id, limit=limit)
-    return {"items": [_message_out(m) for m in rows]}
+    session = chat_service.get_session_for_user(db, user, session_id)
+    total = db.query(ChatMessage).filter(ChatMessage.session_id == session.id).count()
+    rows = chat_service.get_messages(db, user, session_id, limit=limit, offset=offset)
+    return {"items": [_message_out(m) for m in rows], "total": total, "limit": limit, "offset": offset}
 
 
 @router.patch("/sessions/{session_id}")
@@ -205,10 +212,11 @@ def _audit_out(row) -> dict[str, Any]:
 
 @router.get("/audit")
 def chat_audit(
-    limit: int = Query(200, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=10),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
     """Chatbot activity trail: who proposed/confirmed/executed what, and when."""
-    rows = chat_service.list_audit(db, limit=limit)
-    return {"items": [_audit_out(r) for r in rows]}
+    rows = chat_service.list_audit(db, limit=limit, offset=offset)
+    return {"items": [_audit_out(r) for r in rows], "total": db.query(ChatAuditLog).count(), "limit": limit, "offset": offset}

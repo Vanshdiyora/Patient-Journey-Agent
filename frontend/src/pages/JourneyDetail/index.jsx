@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, Play, RefreshCw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { journeysApi, agentsApi } from "../../services";
@@ -6,7 +6,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { formatDate, getErrorMessage, humanize, toList } from "../../utils";
 import { useAuth } from "../../context/AuthContext";
 import { canViewObservability } from "../../utils/roles";
-import { PageHeading, Panel, ErrorState, Badge, AlertBanner, DetailSkeleton } from "../../components";
+import { PageHeading, Panel, ErrorState, Badge, AlertBanner, DetailSkeleton, SkeletonRows } from "../../components";
 import { useConfirm } from "../../components/ConfirmModal";
 import { useToast } from "../../context/ToastContext";
 import StepsTimeline from "./StepsTimeline";
@@ -17,11 +17,15 @@ import { PATHS } from "../../routes/paths";
 
 export default function JourneyDetail() {
   const { journeyId } = useParams();
+  const [eventOffset, setEventOffset] = useState(0);
+  const [actionOffset, setActionOffset] = useState(0);
+  const [agentOffset, setAgentOffset] = useState(0);
+  useEffect(() => { setEventOffset(0); setActionOffset(0); setAgentOffset(0); }, [journeyId]);
   const journey = useAsync(() => journeysApi.get(journeyId), [journeyId]);
   const steps = useAsync(() => journeysApi.steps(journeyId), [journeyId]);
-  const events = useAsync(() => journeysApi.events(journeyId, { limit: 100 }), [journeyId]);
-  const actions = useAsync(() => journeysApi.actions(journeyId), [journeyId]);
-  const agents = useAsync(() => agentsApi.runs({ journey_id: journeyId, limit: 20 }), [journeyId]);
+  const events = useAsync(() => journeysApi.events(journeyId, { limit: 10, offset: eventOffset }), [journeyId, eventOffset]);
+  const actions = useAsync(() => journeysApi.actions(journeyId, { limit: 10, offset: actionOffset }), [journeyId, actionOffset]);
+  const agents = useAsync(() => agentsApi.runs({ journey_id: journeyId, limit: 10, offset: agentOffset }), [journeyId, agentOffset]);
 
   const [busy, setBusy] = useState("");
   const [busyStepId, setBusyStepId] = useState("");
@@ -38,9 +42,9 @@ export default function JourneyDetail() {
 
   const j = journey.data;
   const stepRows = toList(steps.data);
-  const eventRows = toList(events.data);
+  const eventRows = toList(events.data, "items");
   const actionRows = toList(actions.data, "items", "actions");
-  const agentRows = toList(agents.data);
+  const agentRows = toList(agents.data, "items");
 
   const run = async (type, fn) => {
     const ok = await confirm({
@@ -128,7 +132,8 @@ export default function JourneyDetail() {
       setMessage("Event added successfully.");
       setMessageTone("success");
       toast.success("Event added successfully.");
-      await events.refetch();
+      if (eventOffset === 0) await events.refetch();
+      else setEventOffset(0);
       return true;
     } catch (err) {
       const errorText = getErrorMessage(err);
@@ -138,6 +143,23 @@ export default function JourneyDetail() {
       return false;
     } finally {
       setBusy("");
+    }
+  };
+
+  const addStepEvidence = async (step, details, file, evidenceType, approvalConfirmed) => {
+    setBusyStepId(step.id);
+    try {
+      await journeysApi.addStepEvidence(journeyId, step.id, details, file, evidenceType, approvalConfirmed);
+      await Promise.all([steps.refetch(), events.refetch(), journey.refetch()]);
+      toast.success(evidenceType === "APPROVAL"
+        ? "Approval evidence recorded. The journey was re-evaluated."
+        : "Step evidence saved. The journey was re-evaluated.");
+      return true;
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+      return false;
+    } finally {
+      setBusyStepId("");
     }
   };
 
@@ -179,23 +201,27 @@ export default function JourneyDetail() {
       <AgentRunDetails run={runResult} />
     </Panel>}
 
-    <JourneyProgress steps={stepRows} />
+    {steps.loading ? <div className="journey-progress" role="status">Loading journey steps…</div>
+      : !steps.error && <JourneyProgress steps={stepRows} />}
 
     <div className="content-grid content-grid--journey">
       <Panel wide title="Journey steps" subtitle="Current pathway state">
-        <StepsTimeline
-          steps={stepRows}
-          onUpdateTimeLimit={updateStepTimeLimit}
-          onComplete={completeStep}
-          busyStepId={busyStepId}
-          userRole={user?.role}
-        />
+        {steps.loading ? <SkeletonRows count={4} /> : steps.error ?
+          <ErrorState error={steps.error} title="Could not load journey steps" /> :
+          <StepsTimeline
+            steps={stepRows}
+            onUpdateTimeLimit={updateStepTimeLimit}
+            onComplete={completeStep}
+            onAddEvidence={addStepEvidence}
+            busyStepId={busyStepId}
+            userRole={user?.role}
+          />}
       </Panel>
 
       <div style={{ display: "contents" }}>
-        <EventsPanel journeyId={j.id} eventRows={eventRows} loading={events.loading} busy={busy} onAdd={addEvent} />
-        {observability && <AgentActivityPanel agentRows={agentRows} loading={agents.loading} error={agents.error} />}
-        <ActionsPanel actionRows={actionRows} loading={actions.loading} error={actions.error} busy={busy} onDecide={decideAction} />
+        <EventsPanel journeyId={j.id} eventRows={eventRows} loading={events.loading} error={events.error} busy={busy} onAdd={addEvent} onDownloadEvidence={journeysApi.downloadStepEvidence} offset={eventOffset} total={events.data?.total} onPage={setEventOffset} />
+        {observability && <AgentActivityPanel agentRows={agentRows} loading={agents.loading} error={agents.error} offset={agentOffset} total={agents.data?.total} onPage={setAgentOffset} />}
+        <ActionsPanel actionRows={actionRows} loading={actions.loading} error={actions.error} busy={busy} onDecide={decideAction} offset={actionOffset} total={actions.data?.total} onPage={setActionOffset} />
       </div>
     </div>
     {confirmModal}

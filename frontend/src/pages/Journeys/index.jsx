@@ -14,7 +14,7 @@ export default function Journeys() {
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
   const [offset, setOffset] = useState(0);
-  const limit = 20;
+  const limit = 10;
   const { data, loading, error } = useAsync(
     () => journeysApi.list({ status: status || undefined, priority: priority || undefined, limit, offset }),
     [status, priority, offset]
@@ -52,7 +52,7 @@ export default function Journeys() {
               ))}</tbody>
             </table></div>
           ) : <EmptyState icon={Network} title="No journeys found" text="Change the filters to see other journeys." />}
-      <Pagination offset={offset} limit={limit} count={rows.length} onPage={setOffset} />
+      {!loading && !error && <Pagination offset={offset} limit={limit} count={rows.length} total={data?.total ?? rows.length} onPage={setOffset} />}
     </Panel>
   </div>;
 }

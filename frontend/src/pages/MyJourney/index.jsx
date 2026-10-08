@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Activity, HeartPulse, ListChecks, Send } from "lucide-react";
 import { meApi } from "../../services";
@@ -6,7 +6,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { useTabs } from "../../hooks/useTabs";
 import { formatDate, getErrorMessage, toList } from "../../utils";
 import { useAuth } from "../../context/AuthContext";
-import { Badge, EmptyState, Panel, TabBar } from "../../components";
+import { Badge, EmptyState, Panel, TabBar, Pagination } from "../../components";
 import JourneyMetrics from "./JourneyMetrics";
 import CarePlanPanel from "./CarePlanPanel";
 import UpdatesPanel from "./UpdatesPanel";
@@ -46,11 +46,17 @@ function UpdateTypesPanel() {
 export default function MyJourney() {
   const { user } = useAuth();
   const { active: tab, select: setTab } = useTabs("overview");
-  const journeys = useAsync(() => meApi.journeys(), []);
+  const [journeyOffset, setJourneyOffset] = useState(0);
+  const [eventOffset, setEventOffset] = useState(0);
+  const journeys = useAsync(() => meApi.journeys({ limit: 10, offset: journeyOffset }), [journeyOffset]);
   const rows = toList(journeys.data, "items");
   const [searchParams, setSearchParams] = useSearchParams();
   const linkedJourneyId = searchParams.get("journeyId");
   const currentId = rows.find(j => j.id === linkedJourneyId)?.id || rows[0]?.id || null;
+  useEffect(() => {
+    if (journeyOffset && journeys.data?.total != null && journeyOffset >= journeys.data.total) setJourneyOffset(Math.max(0, Math.ceil(journeys.data.total / 10) - 1) * 10);
+  }, [journeys.data?.total, journeyOffset]);
+  useEffect(() => { setEventOffset(0); }, [currentId]);
   const selectJourney = (id) => setSearchParams(current => {
     const next = new URLSearchParams(current);
     next.set("journeyId", id);
@@ -58,9 +64,9 @@ export default function MyJourney() {
   });
   const currentJourney = rows.find(j => j.id === currentId);
   const steps = useAsync(() => (currentId ? meApi.journeySteps(currentId) : Promise.resolve([])), [currentId]);
-  const events = useAsync(() => (currentId ? meApi.journeyEvents(currentId) : Promise.resolve([])), [currentId]);
+  const events = useAsync(() => (currentId ? meApi.journeyEvents(currentId, { limit: 10, offset: eventOffset }) : Promise.resolve({ items: [], total: 0 })), [currentId, eventOffset]);
   const stepRows = toList(steps.data);
-  const eventRows = toList(events.data);
+  const eventRows = toList(events.data, "items");
   const done = stepRows.filter(s => ["COMPLETED", "RESOLVED"].includes(String(s.status).toUpperCase())).length;
   const submitStep = async (stepId, comment) => {
     await meApi.submitStep(currentId, stepId, comment);
@@ -70,6 +76,7 @@ export default function MyJourney() {
   if (journeys.loading) return <div className="skeleton-detail"><i /><i /><i /></div>;
   if (journeys.error) return <div className="empty-state"><strong>Could not load your journey</strong><span>{getErrorMessage(journeys.error)}</span></div>;
 
+  if (!rows.length && journeys.data?.total > 0) return <div className="skeleton-detail"><i /><i /><i /></div>;
   if (!rows.length) {
     return <EmptyState icon={HeartPulse} title="No active journey" text="Your care team has not started a journey for you yet." />;
   }
@@ -93,33 +100,37 @@ export default function MyJourney() {
     <TabBar
       tabs={TABS.map(t => ({
         ...t,
-        count: t.id === "plan" ? stepRows.length : t.id === "updates" ? eventRows.length : undefined,
+        count: t.id === "plan" ? stepRows.length : t.id === "updates" ? events.data?.total : undefined,
       }))}
       active={tab}
       onChange={setTab}
     />
 
     {tab === "overview" && <>
-      <JourneyMetrics stepRows={stepRows} eventRows={eventRows} nextStep={nextStep} done={done} />
+      <JourneyMetrics stepRows={stepRows} eventTotal={events.data?.total ?? 0} processedTotal={events.data?.processed_total ?? 0} nextStep={nextStep} done={done} />
       <JourneyPicker journeys={rows} currentId={currentId} onSelect={selectJourney} />
+      <Pagination offset={journeyOffset} count={rows.length} total={journeys.data?.total ?? 0} onPage={setJourneyOffset} />
       <ProgressCard done={done} total={stepRows.length} />
       <div className="content-grid content-grid--journey">
         <CarePlanPanel steps={steps} stepRows={stepRows} onSubmitStep={submitStep} />
-        <UpdatesPanel events={events} eventRows={eventRows} currentId={currentId} onSent={() => events.refetch()} />
+        <UpdatesPanel events={events} eventRows={eventRows} currentId={currentId} onSent={() => { setEventOffset(0); events.refetch(); }} offset={eventOffset} total={events.data?.total} onPage={setEventOffset} />
       </div>
     </>}
 
     {tab === "plan" && <>
       <JourneyPicker journeys={rows} currentId={currentId} onSelect={selectJourney} />
+      <Pagination offset={journeyOffset} count={rows.length} total={journeys.data?.total ?? 0} onPage={setJourneyOffset} />
       <ProgressCard done={done} total={stepRows.length} />
       <CarePlanPanel steps={steps} stepRows={stepRows} onSubmitStep={submitStep} />
     </>}
 
-    {tab === "updates" && (
+    {tab === "updates" && <>
+      <JourneyPicker journeys={rows} currentId={currentId} onSelect={selectJourney} />
+      <Pagination offset={journeyOffset} count={rows.length} total={journeys.data?.total ?? 0} onPage={setJourneyOffset} />
       <div className="content-grid content-grid--journey">
-        <UpdatesPanel events={events} eventRows={eventRows} currentId={currentId} onSent={() => events.refetch()} />
+        <UpdatesPanel events={events} eventRows={eventRows} currentId={currentId} onSent={() => { setEventOffset(0); events.refetch(); }} offset={eventOffset} total={events.data?.total} onPage={setEventOffset} />
         <UpdateTypesPanel />
       </div>
-    )}
+    </>}
   </div>;
 }

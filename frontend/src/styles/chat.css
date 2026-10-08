@@ -183,3 +183,6 @@
   .chat-launcher-wrap{right:14px;bottom:14px}
   .chat-panel{right:8px;bottom:76px;width:calc(100vw - 16px);height:calc(100vh - 100px)}
 }
+.chat-history-pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;color:#71807c;font-size:11px}
+.chat-history-pagination button{border:0;background:transparent;color:var(--teal);font-size:11px;font-weight:700;cursor:pointer}
+.chat-history-pagination button:disabled{color:#aab5b2;cursor:default}

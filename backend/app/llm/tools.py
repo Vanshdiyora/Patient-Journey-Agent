@@ -190,8 +190,11 @@ SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "complete_step", "mark a journey step as completed",
-        "Mark a READY or IN_PROGRESS journey step as completed (staff confirmation). Enforces the step "
-        "owner's role. Requires user confirmation.",
+        "For staff only. Find the requested journey and step using get_journey_steps, then mark that "
+        "specific step complete only if its status is READY or IN_PROGRESS and the signed-in staff "
+        "role is authorized for its owner_role. Do not infer that the care task happened from the "
+        "request alone; if the user has not stated it was actually performed, ask first. The app "
+        "requires explicit confirmation in its action card before completion.",
         STAFF, write.tool_complete_step,
         {"journey_id": JOURNEY_ID, "step_id": STEP_ID}, ("journey_id", "step_id"), confirm=True,
         ask={"journey_id": "which journey", "step_id": "which step to complete"},

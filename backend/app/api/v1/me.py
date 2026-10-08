@@ -55,16 +55,12 @@ def my_profile(user=Depends(require_patient), db: Session = Depends(get_db)):
     }
 
 
-@router.get("/journeys", response_model=list[JourneyResponse])
-def my_journeys(user=Depends(require_patient), db: Session = Depends(get_db)):
+@router.get("/journeys")
+def my_journeys(limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), user=Depends(require_patient), db: Session = Depends(get_db)):
     patient_id = get_owned_patient(user)
-    journeys = (
-        db.query(Journey)
-        .filter(Journey.patient_id == patient_id)
-        .order_by(Journey.started_at.desc())
-        .all()
-    )
-    return journeys_with_pathways(db, journeys)
+    q = db.query(Journey).filter(Journey.patient_id == patient_id)
+    journeys = q.order_by(Journey.started_at.desc(), Journey.id.desc()).offset(offset).limit(limit).all()
+    return {"items": journeys_with_pathways(db, journeys), "total": q.count(), "limit": limit, "offset": offset}
 
 
 @router.get("/journeys/{journey_id}", response_model=JourneyResponse)
@@ -81,16 +77,14 @@ def my_journey_steps(journey_id: UUID, user=Depends(require_patient), db: Sessio
     return steps_with_pathway_details(db, journey.id)
 
 
-@router.get("/journeys/{journey_id}/events", response_model=list[PatientEventResponse])
-def my_journey_events(journey_id: UUID, user=Depends(require_patient), db: Session = Depends(get_db)):
+@router.get("/journeys/{journey_id}/events")
+def my_journey_events(journey_id: UUID, limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), user=Depends(require_patient), db: Session = Depends(get_db)):
     journey = _own_journey(journey_id, db, get_owned_patient(user))
-    return (
-        db.query(PatientEvent)
-        .filter(PatientEvent.journey_id == journey.id)
-        .order_by(PatientEvent.event_time.desc())
-        .limit(100)
-        .all()
-    )
+    q = db.query(PatientEvent).filter(PatientEvent.journey_id == journey.id)
+    rows = q.order_by(PatientEvent.event_time.desc(), PatientEvent.id.desc()).offset(offset).limit(limit).all()
+    return {"items": [PatientEventResponse.model_validate(row).model_dump(mode="json") for row in rows],
+            "total": q.count(), "processed_total": q.filter(PatientEvent.processed.is_(True)).count(),
+            "limit": limit, "offset": offset}
 
 
 @router.post("/journeys/{journey_id}/events", response_model=PatientEventResponse, status_code=201)

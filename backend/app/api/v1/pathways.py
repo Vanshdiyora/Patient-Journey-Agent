@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.authorization import require_admin
 from app.core.database import get_db
@@ -41,11 +42,20 @@ def _serialize_pathway(pathway: Pathway, steps: list[PathwayStep]) -> dict:
 
 @router.get("")
 def list_pathways(
+    limit: int = Query(10, ge=1, le=10),
+    offset: int = Query(0, ge=0),
+    latest_only: bool = False,
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    pathways = db.query(Pathway).order_by(Pathway.name, Pathway.version.desc()).all()
-    return [
+    q = db.query(Pathway)
+    if latest_only:
+        other = aliased(Pathway)
+        latest = db.query(func.max(other.version)).filter(other.code == Pathway.code).correlate(Pathway).scalar_subquery()
+        q = q.filter(Pathway.version == latest)
+    total = q.count()
+    pathways = q.order_by(Pathway.name, Pathway.version.desc(), Pathway.id.desc()).offset(offset).limit(limit).all()
+    items = [
         _serialize_pathway(
             pathway,
             db.query(PathwayStep)
@@ -55,6 +65,7 @@ def list_pathways(
         )
         for pathway in pathways
     ]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("", status_code=201)

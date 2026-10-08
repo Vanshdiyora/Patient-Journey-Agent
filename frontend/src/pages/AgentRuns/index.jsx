@@ -1,17 +1,20 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Bot, ChevronDown, ChevronRight, Clock3 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { agentsApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { formatDate, formatDuration, humanize, toList } from "../../utils";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows } from "../../components";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, Pagination } from "../../components";
 import AgentRunDetails from "../../components/AgentRunDetails";
 import { PATHS, buildPath } from "../../routes/paths";
 
 export default function AgentRuns() {
   const [searchParams] = useSearchParams();
-  const [expanded, setExpanded] = useState(() => searchParams.get("run"));
-  const { data, loading, error } = useAsync(() => agentsApi.runs({ limit: 100 }), []);
+  const runId = searchParams.get("run");
+  const [expanded, setExpanded] = useState(() => runId);
+  const [offset, setOffset] = useState(0);
+  useEffect(() => { setOffset(0); setExpanded(runId); }, [runId]);
+  const { data, loading, error } = useAsync(() => agentsApi.runs({ limit: 10, offset, run_id: runId || undefined }), [offset, runId]);
   const rows = toList(data, "items", "runs");
   const selected = expanded;
 
@@ -19,9 +22,10 @@ export default function AgentRuns() {
     <PageHeading eyebrow="Agent observability" title="Agent activity" description="Audit agent execution, context, tool calls and outcomes." />
     <Panel
       title="Recent agent runs"
-      subtitle={`${rows.length} saved agent and orchestration records`}
+      subtitle={`${data?.total ?? rows.length} saved agent and orchestration records`}
       action={
         <div className="agent-legend">
+          {runId && <Link className="text-link" to={PATHS.agentRuns}>All runs</Link>}
           <span>Open a run to inspect its output and steps</span>
         </div>
       }
@@ -49,6 +53,7 @@ export default function AgentRuns() {
               </div>
             ))}</div>
           ) : <EmptyState icon={Bot} title="No agent activity" text="Agent runs will appear here as journeys are evaluated and orchestrated." />}
+      {!loading && !error && <Pagination offset={offset} count={rows.length} total={data?.total ?? 0} onPage={setOffset} />}
     </Panel>
   </div>;
 }
