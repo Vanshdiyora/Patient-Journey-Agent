@@ -24,6 +24,7 @@ from app.schemas.patient_event import (
 )
 from app.schemas import JourneyResponse, JourneyStepResponse
 from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
+from app.services.journey_service import sync_journey_to_active_pathway
 
 router = APIRouter(prefix="/me", tags=["patient"])
 
@@ -75,6 +76,8 @@ def my_journey(journey_id: UUID, user=Depends(require_patient), db: Session = De
 @router.get("/journeys/{journey_id}/steps", response_model=list[JourneyStepResponse])
 def my_journey_steps(journey_id: UUID, user=Depends(require_patient), db: Session = Depends(get_db)):
     journey = _own_journey(journey_id, db, get_owned_patient(user))
+    if sync_journey_to_active_pathway(db, journey.id):
+        db.commit()
     return steps_with_pathway_details(db, journey.id)
 
 

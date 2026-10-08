@@ -7,15 +7,33 @@ const COMPLETED_STATES = ["completed", "resolved"];
 const STAFF_ROLES = new Set(["ADMIN", "CLINICIAN", "CARE_COORDINATOR"]);
 const ROLE_PERMISSIONS = {
   ADMIN: new Set(["ADMIN"]),
-  CLINICIAN: new Set(["ADMIN", "CLINICIAN"]),
-  CARE_COORDINATOR: new Set(["ADMIN", "CARE_COORDINATOR"]),
+  CLINICIAN: new Set(["CLINICIAN"]),
+  CARE_COORDINATOR: new Set(["CARE_COORDINATOR"]),
 };
 
 function canUserCompleteStep(step, role) {
   const ownerRole = String(step.owner_role || "STAFF").toUpperCase();
   if (ownerRole === "AGENT") return false;
   if (ownerRole === "PATIENT") return Boolean(step.patient_submission_pending) && STAFF_ROLES.has(role);
-  return (ROLE_PERMISSIONS[ownerRole] || STAFF_ROLES).has(role);
+  if (ownerRole === "STAFF") return STAFF_ROLES.has(role);
+  return ROLE_PERMISSIONS[ownerRole]?.has(role) || false;
+}
+
+function completionHint(step) {
+  const ownerRole = String(step.owner_role || "STAFF").toUpperCase();
+  if (ownerRole === "PATIENT") {
+    return step.patient_submission_pending
+      ? "Awaiting staff review"
+      : "Waiting for patient submission";
+  }
+  if (ownerRole === "AGENT") {
+    return "Waiting for verified agent action";
+  }
+  if (ownerRole === "STAFF") {
+    return "Any staff role can complete";
+  }
+  if (!ROLE_PERMISSIONS[ownerRole]) return "Cannot complete: invalid responsible role";
+  return `Waiting for ${humanize(ownerRole)}`;
 }
 
 function TimelineItem({ step, index, onUpdateTimeLimit, onComplete, busyStepId, userRole, limit, setLimit }) {
@@ -80,6 +98,11 @@ function TimelineItem({ step, index, onUpdateTimeLimit, onComplete, busyStepId, 
             disabled={busyStepId === step.id}
           >
             <CheckCircle2 size={14} />{completionLabel}
+          </button>
+        )}
+        {onComplete && !isCompleted && ["READY", "IN_PROGRESS"].includes(status) && !canComplete && (
+          <button className="secondary-btn step-complete-btn" type="button" disabled>
+            <Clock3 size={14} />{completionHint(step)}
           </button>
         )}
       </div>

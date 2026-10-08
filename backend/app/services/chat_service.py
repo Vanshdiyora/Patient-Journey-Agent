@@ -54,6 +54,8 @@ def _system_prompt(user: User) -> str:
         f"Tasks this role can do: {', '.join(can)}.\n"
         "Rules:\n"
         "- Answer in the user's language, briefly and helpfully.\n"
+        "- Format replies for a narrow chat panel: use short paragraphs or bullets, "
+        "and avoid tables unless the user explicitly asks for one. Do not dump raw JSON.\n"
         "- Get every fact by calling a tool; never answer from memory or invent ids, data or "
         "medical advice. Present tool results in plain language (names, not UUIDs).\n"
         "- If the user asks for ANY task, still call the matching tool even if you think their role "

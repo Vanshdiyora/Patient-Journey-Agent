@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.authorization import (
     STAFF_ROLES,
+    can_read_journey,
     get_journey_for_action,
     get_journey_scoped,
     require_staff,
@@ -22,6 +23,7 @@ from app.orchestration.langgraph_supervisor import OrchestrationFailure, Supervi
 from app.agents.supervisor.tools import build_supervisor_context
 from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
 from app.rules.journey_rule_engine import JourneyRuleEngine
+from app.services.journey_service import sync_journey_to_active_pathway
 
 router = APIRouter()
 
@@ -148,7 +150,7 @@ def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff
 
 
 def _check_step_completion_permission(db, journey, step, pathway_step, user):
-    owner_role = step.owner_role or pathway_step.owner_role or "STAFF"
+    owner_role = str(step.owner_role or pathway_step.owner_role or "STAFF").upper()
     if owner_role == "PATIENT":
         pending_submission = (
             db.query(PatientEvent)
@@ -165,14 +167,14 @@ def _check_step_completion_permission(db, journey, step, pathway_step, user):
         return owner_role
 
     allowed_roles = {
-        "CLINICIAN": {"CLINICIAN", "ADMIN"},
-        "CARE_COORDINATOR": {"CARE_COORDINATOR", "ADMIN"},
+        "CLINICIAN": {"CLINICIAN"},
+        "CARE_COORDINATOR": {"CARE_COORDINATOR"},
         "ADMIN": {"ADMIN"},
         "STAFF": STAFF_ROLES,
     }
     if owner_role == "AGENT":
         raise HTTPException(409, "Agent-owned steps are completed only after a verified agent action.")
-    if user.role not in allowed_roles.get(owner_role, STAFF_ROLES):
+    if str(user.role).upper() not in allowed_roles.get(owner_role, set()):
         raise HTTPException(403, f"This step is assigned to {owner_role.lower().replace('_', ' ')} staff.")
     return owner_role
 
@@ -186,6 +188,8 @@ def get_journey(journey_id: UUID, db: Session = Depends(get_db), user=Depends(re
 @router.get("/journeys/{journey_id}/steps", response_model=list[JourneyStepResponse])
 def steps(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
     get_journey_scoped(journey_id, db, user)
+    if sync_journey_to_active_pathway(db, journey_id):
+        db.commit()
     return steps_with_pathway_details(db, journey_id)
 
 
@@ -197,12 +201,22 @@ def complete_journey_step(
     db: Session = Depends(get_db),
     user=Depends(require_staff),
 ):
-    journey = get_journey_scoped(journey_id, db, user)
+    # Serialize step completion per journey before locking an individual step.
+    # The evaluator updates multiple steps, so taking step locks first lets
+    # concurrent completions deadlock while each waits for the other's step.
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id)
+        .with_for_update()
+        .first()
+    )
+    if not journey or not can_read_journey(user, journey):
+        raise HTTPException(404, "Resource not found")
     step_row = (
         db.query(JourneyStep, PathwayStep)
         .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
         .filter(JourneyStep.id == step_id, JourneyStep.journey_id == journey_id)
-        .with_for_update()
+        .with_for_update(of=JourneyStep)
         .first()
     )
     if not step_row:

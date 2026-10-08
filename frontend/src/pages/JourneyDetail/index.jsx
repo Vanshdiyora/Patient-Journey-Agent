@@ -11,7 +11,7 @@ import { useConfirm } from "../../components/ConfirmModal";
 import { useToast } from "../../context/ToastContext";
 import StepsTimeline from "./StepsTimeline";
 import JourneyProgress from "./JourneyProgress";
-import { ContextPanel, EventsPanel, AgentActivityPanel, ActionsPanel } from "./panels";
+import { EventsPanel, AgentActivityPanel, ActionsPanel } from "./panels";
 import AgentRunDetails, { finalStateLabel } from "../../components/AgentRunDetails";
 import { PATHS } from "../../routes/paths";
 
@@ -25,7 +25,6 @@ export default function JourneyDetail() {
 
   const [busy, setBusy] = useState("");
   const [busyStepId, setBusyStepId] = useState("");
-  const [contextVersion, setContextVersion] = useState(0);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState("success");
   const [runResult, setRunResult] = useState(null);
@@ -87,7 +86,6 @@ export default function JourneyDetail() {
     try {
       await journeysApi.completeStep(journeyId, step.id);
       await Promise.all([journey.refetch(), steps.refetch(), events.refetch()]);
-      setContextVersion(version => version + 1);
       toast.success("Step marked completed. The next eligible step has been evaluated.");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -146,7 +144,6 @@ export default function JourneyDetail() {
     try {
       await journeysApi.updateStepTimeLimit(journeyId, stepId, hours);
       await Promise.all([journey.refetch(), steps.refetch()]);
-      setContextVersion(version => version + 1);
       toast.success("Step time limit updated.");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -192,8 +189,6 @@ export default function JourneyDetail() {
           userRole={user?.role}
         />
       </Panel>
-
-      {observability && <ContextPanel key={contextVersion} journeyId={j.id} />}
 
       <div style={{ display: "contents" }}>
         <EventsPanel journeyId={j.id} eventRows={eventRows} loading={events.loading} busy={busy} onAdd={addEvent} />

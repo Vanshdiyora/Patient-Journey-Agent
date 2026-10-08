@@ -107,7 +107,7 @@ export default function PathwayEditDrawer({ pathway, onClose, onSaved }) {
         })),
       });
       await onSaved();
-      toast.success("Care pathway updated. New journeys will use the new version.");
+      toast.success("Care pathway updated. Active patient journeys now use the new version.");
     } catch (submitError) {
       setError(getErrorMessage(submitError));
     } finally {
@@ -122,7 +122,7 @@ export default function PathwayEditDrawer({ pathway, onClose, onSaved }) {
           <div>
             <span className="eyebrow">Care pathway · {pathway.code} · v{pathway.version}</span>
             <h2 id="pathway-drawer-title">Edit pathway</h2>
-            <p>Saving creates a new version for future journeys.</p>
+            <p>Saving creates a new version and updates active patient journeys. Completed journeys stay on their original version.</p>
           </div>
           <button ref={closeButton} className="icon-btn" type="button" aria-label="Close edit pathway" onClick={close} disabled={busy}><X size={18} /></button>
         </div>

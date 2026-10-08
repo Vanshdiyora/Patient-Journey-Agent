@@ -1,18 +1,9 @@
 import React, { useState } from "react";
-import { Bot, CalendarClock, ChevronDown, ChevronRight, FileJson, Sparkles } from "lucide-react";
-import { journeysApi } from "../../services";
-import { useAsync } from "../../hooks/useAsync";
+import { Bot, CalendarClock, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { formatDate, humanize } from "../../utils";
-import { JsonView, Panel, EmptyState, ErrorState, SkeletonRows, Badge } from "../../components";
+import { Panel, EmptyState, ErrorState, SkeletonRows, Badge } from "../../components";
 import AgentRunDetails from "../../components/AgentRunDetails";
 import AddEventForm from "./AddEventForm";
-
-export function ContextPanel({ journeyId }) {
-  const { data, loading } = useAsync(() => journeysApi.context(journeyId), [journeyId]);
-  return <Panel title="Orchestration context" subtitle="Decision context" headerIcon={FileJson}>
-    {loading ? <div className="mini-loader" /> : <JsonView data={data} />}
-  </Panel>;
-}
 
 export function EventsPanel({ eventRows, loading, busy, onAdd }) {
   return <Panel title="Events" subtitle="Journey event stream" headerIcon={CalendarClock}>

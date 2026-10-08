@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.authorization import require_admin
 from app.core.database import get_db
-from app.models import Dependency, Pathway, PathwayActionRule, PathwayStep
+from app.models import Dependency, Journey, JourneyStep, Pathway, PathwayActionRule, PathwayStep
+from app.orchestration.journey_engine import JourneyEngine
 from app.schemas.pathway import PathwayCreate, PathwayUpdate
 
 router = APIRouter(prefix="/pathways", tags=["pathways"])
@@ -119,7 +120,8 @@ def update_pathway(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    # A new version keeps every assigned journey attached to its original steps.
+    # Updating the pathway creates a new version; active journeys are migrated
+    # after the new steps and their dependent rules have been copied.
     previous = db.query(Pathway).filter(Pathway.id == pathway_id).with_for_update().first()
     if previous is None:
         raise HTTPException(404, "Pathway not found")
@@ -148,6 +150,9 @@ def update_pathway(
     previous.updated_at = now
 
     step_ids = {}
+    updated_steps_by_code = {}
+    updated_steps_by_source_id = {}
+    updated_steps = []
     for sequence_number, template in enumerate(data.steps, start=1):
         source = by_id.get(template.id)
         new_step = PathwayStep(
@@ -161,8 +166,11 @@ def update_pathway(
             created_at=now, updated_at=now,
         )
         db.add(new_step)
+        updated_steps.append(new_step)
         if source:
             step_ids[source.id] = new_step.id
+            updated_steps_by_source_id[source.id] = new_step
+        updated_steps_by_code[new_step.code] = new_step
 
     # These models use UUID columns without ORM relationships, so flush the
     # parent and steps before inserting rows with database foreign keys.
@@ -192,6 +200,87 @@ def update_pathway(
                 requires_approval=rule.requires_approval,
                 conditions=rule.conditions, created_at=now,
             ))
+
+    # Keep active patients on the edited pathway. Retained steps keep their
+    # journey-step IDs and completion state; removed unfinished steps are
+    # cancelled, and newly added steps start pending.
+    pathway_ids = [
+        row[0]
+        for row in db.query(Pathway.id).filter(Pathway.code == previous.code).all()
+    ]
+    active_journeys = (
+        db.query(Journey)
+        .filter(
+            Journey.pathway_id.in_(pathway_ids),
+            Journey.status.in_(("ACTIVE", "BLOCKED")),
+        )
+        .order_by(Journey.id)
+        .with_for_update()
+        .all()
+    )
+    for journey in active_journeys:
+        journey_steps = (
+            db.query(JourneyStep, PathwayStep)
+            .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+            .filter(JourneyStep.journey_id == journey.id)
+            .order_by(JourneyStep.id)
+            .with_for_update(of=JourneyStep)
+            .all()
+        )
+        retained_template_ids = set()
+        for journey_step, source_step in journey_steps:
+            updated_step = (
+                updated_steps_by_source_id.get(source_step.id)
+                or updated_steps_by_code.get(source_step.code)
+            )
+            if updated_step is None:
+                if journey_step.status not in {"COMPLETED", "CANCELLED"}:
+                    journey_step.status = "CANCELLED"
+                    journey_step.block_reason = None
+                    journey_step.updated_at = now
+                continue
+
+            journey_step.pathway_step_id = updated_step.id
+            journey_step.owner_role = updated_step.owner_role or "STAFF"
+            if source_step.time_limit_hours != updated_step.time_limit_hours:
+                journey_step.time_limit_hours = (
+                    updated_step.time_limit_hours
+                    if updated_step.time_limit_hours is not None
+                    else max(updated_step.due_after_days or 1, 1) * 24
+                )
+                if journey_step.status in {"READY", "IN_PROGRESS", "BLOCKED"}:
+                    journey_step.started_at = now
+                    journey_step.due_at = now + timedelta(hours=journey_step.time_limit_hours)
+            journey_step.updated_at = now
+            retained_template_ids.add(updated_step.id)
+
+        for index, template in enumerate(data.steps):
+            updated_step = updated_steps[index]
+            if updated_step.id in retained_template_ids:
+                continue
+            time_limit_hours = (
+                updated_step.time_limit_hours
+                if updated_step.time_limit_hours is not None
+                else max(updated_step.due_after_days or 1, 1) * 24
+            )
+            db.add(JourneyStep(
+                id=uuid4(),
+                journey_id=journey.id,
+                pathway_step_id=updated_step.id,
+                status="PENDING",
+                owner_role=updated_step.owner_role or "STAFF",
+                time_limit_hours=time_limit_hours,
+                due_at=None,
+                started_at=None,
+                created_at=now,
+                updated_at=now,
+            ))
+
+        journey.pathway_id = updated.id
+        journey.pathway_version = updated.version
+        journey.updated_at = now
+        JourneyEngine(db).evaluate(journey.id)
+
     try:
         db.commit()
     except IntegrityError as exc:

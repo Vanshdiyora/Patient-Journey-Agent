@@ -1,4 +1,5 @@
 import React from "react";
+import { useSearchParams } from "react-router-dom";
 import { Activity, HeartPulse, ListChecks, Send } from "lucide-react";
 import { meApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
@@ -47,8 +48,14 @@ export default function MyJourney() {
   const { active: tab, select: setTab } = useTabs("overview");
   const journeys = useAsync(() => meApi.journeys(), []);
   const rows = toList(journeys.data, "items");
-  const [selectedId, setSelectedId] = React.useState(null);
-  const currentId = selectedId || rows[0]?.id || null;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedJourneyId = searchParams.get("journeyId");
+  const currentId = rows.find(j => j.id === linkedJourneyId)?.id || rows[0]?.id || null;
+  const selectJourney = (id) => setSearchParams(current => {
+    const next = new URLSearchParams(current);
+    next.set("journeyId", id);
+    return next;
+  });
   const currentJourney = rows.find(j => j.id === currentId);
   const steps = useAsync(() => (currentId ? meApi.journeySteps(currentId) : Promise.resolve([])), [currentId]);
   const events = useAsync(() => (currentId ? meApi.journeyEvents(currentId) : Promise.resolve([])), [currentId]);
@@ -94,7 +101,7 @@ export default function MyJourney() {
 
     {tab === "overview" && <>
       <JourneyMetrics stepRows={stepRows} eventRows={eventRows} nextStep={nextStep} done={done} />
-      <JourneyPicker journeys={rows} currentId={currentId} onSelect={setSelectedId} />
+      <JourneyPicker journeys={rows} currentId={currentId} onSelect={selectJourney} />
       <ProgressCard done={done} total={stepRows.length} />
       <div className="content-grid content-grid--journey">
         <CarePlanPanel steps={steps} stepRows={stepRows} onSubmitStep={submitStep} />
@@ -103,7 +110,7 @@ export default function MyJourney() {
     </>}
 
     {tab === "plan" && <>
-      <JourneyPicker journeys={rows} currentId={currentId} onSelect={setSelectedId} />
+      <JourneyPicker journeys={rows} currentId={currentId} onSelect={selectJourney} />
       <ProgressCard done={done} total={stepRows.length} />
       <CarePlanPanel steps={steps} stepRows={stepRows} onSubmitStep={submitStep} />
     </>}

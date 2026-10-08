@@ -57,6 +57,94 @@ def pathway_steps(db: Session, pathway_id: UUID) -> list[PathwayStep]:
     )
 
 
+def sync_journey_to_active_pathway(db: Session, journey_id: UUID) -> bool:
+    """Move an active journey to the latest active version of its pathway."""
+    journey = (
+        db.query(Journey)
+        .filter(Journey.id == journey_id)
+        .with_for_update()
+        .first()
+    )
+    if journey is None or journey.status not in ACTIVE_JOURNEY_STATUSES:
+        return False
+
+    source_pathway = db.query(Pathway).filter(Pathway.id == journey.pathway_id).first()
+    if source_pathway is None:
+        return False
+    active_pathway = (
+        db.query(Pathway)
+        .filter(Pathway.code == source_pathway.code, Pathway.status == "ACTIVE")
+        .order_by(Pathway.version.desc())
+        .first()
+    )
+    if active_pathway is None or active_pathway.id == journey.pathway_id:
+        return False
+
+    target_steps = pathway_steps(db, active_pathway.id)
+    target_by_code = {step.code: step for step in target_steps}
+    journey_steps = (
+        db.query(JourneyStep, PathwayStep)
+        .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
+        .filter(JourneyStep.journey_id == journey.id)
+        .order_by(JourneyStep.id)
+        .with_for_update(of=JourneyStep)
+        .all()
+    )
+    retained_step_ids = set()
+    now = datetime.now(timezone.utc)
+
+    for journey_step, source_step in journey_steps:
+        target_step = target_by_code.get(source_step.code)
+        if target_step is None:
+            if journey_step.status not in {"COMPLETED", "CANCELLED"}:
+                journey_step.status = "CANCELLED"
+                journey_step.block_reason = None
+                journey_step.updated_at = now
+            continue
+
+        journey_step.pathway_step_id = target_step.id
+        journey_step.owner_role = target_step.owner_role or "STAFF"
+        if source_step.time_limit_hours != target_step.time_limit_hours:
+            journey_step.time_limit_hours = (
+                target_step.time_limit_hours
+                if target_step.time_limit_hours is not None
+                else max(target_step.due_after_days or 1, 1) * 24
+            )
+            if journey_step.status in {"READY", "IN_PROGRESS", "BLOCKED"}:
+                journey_step.started_at = now
+                journey_step.due_at = now + timedelta(hours=journey_step.time_limit_hours)
+        journey_step.updated_at = now
+        retained_step_ids.add(target_step.id)
+
+    for target_step in target_steps:
+        if target_step.id in retained_step_ids:
+            continue
+        time_limit_hours = (
+            target_step.time_limit_hours
+            if target_step.time_limit_hours is not None
+            else max(target_step.due_after_days or 1, 1) * 24
+        )
+        db.add(JourneyStep(
+            id=uuid4(),
+            journey_id=journey.id,
+            pathway_step_id=target_step.id,
+            status="PENDING",
+            owner_role=target_step.owner_role or "STAFF",
+            time_limit_hours=time_limit_hours,
+            due_at=None,
+            started_at=None,
+            created_at=now,
+            updated_at=now,
+        ))
+
+    journey.pathway_id = active_pathway.id
+    journey.pathway_version = active_pathway.version
+    journey.updated_at = now
+    db.flush()
+    JourneyEngine(db).evaluate(journey.id)
+    return True
+
+
 def start_journey_for_patient(
     db: Session,
     patient_id: UUID,

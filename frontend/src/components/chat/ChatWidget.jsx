@@ -79,8 +79,12 @@ export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("chat"); // chat | history
   const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionsError, setSessionsError] = useState("");
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [historyLoadError, setHistoryLoadError] = useState("");
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [typing, setTyping] = useState(false);
@@ -96,33 +100,46 @@ export default function ChatWidget() {
   const sendingRef = useRef(false);
   const recognitionRef = useRef(null);
   const sessionRef = useRef(null);
+  const historyRequestRef = useRef(0);
+  const messageRequestRef = useRef(0);
 
   const isPatient = user?.role?.toUpperCase() === "PATIENT";
 
   // ------------------------------------------------------------------ data
 
   const loadSessions = useCallback(() => {
+    const request = ++historyRequestRef.current;
+    setLoadingSessions(true);
+    setSessionsError("");
     chatApi.listSessions()
-      .then(r => setSessions(r.items || []))
-      .catch(() => setSessions([]));
+      .then(r => { if (request === historyRequestRef.current) setSessions(r.items || []); })
+      .catch(() => { if (request === historyRequestRef.current) setSessionsError("Could not load conversations."); })
+      .finally(() => { if (request === historyRequestRef.current) setLoadingSessions(false); });
   }, []);
 
   const loadMessages = useCallback((id) => {
     if (!id) return;
+    const request = ++messageRequestRef.current;
+    setLoadingMessages(true);
+    setHistoryLoadError("");
     chatApi.messages(id)
       .then(r => {
-        if (sessionRef.current === id) {
+        if (request === messageRequestRef.current && sessionRef.current === id) {
           setMessages(prev => mergeMessages(r.items || [], prev.filter(m => m.session_id === id)));
         }
       })
-      .catch(() => { if (sessionRef.current === id) setError("Could not load this conversation."); });
+      .catch(() => { if (request === messageRequestRef.current && sessionRef.current === id) setHistoryLoadError("Could not load this conversation."); })
+      .finally(() => { if (request === messageRequestRef.current) setLoadingMessages(false); });
   }, []);
 
   const startNewChat = useCallback(() => {
     if (sendingRef.current) return;
+    messageRequestRef.current += 1;
     sessionRef.current = null;
     setSessionId(null);
     setMessages([]);
+    setLoadingMessages(false);
+    setHistoryLoadError("");
     setView("chat");
     setError("");
   }, []);
@@ -132,6 +149,7 @@ export default function ChatWidget() {
     sessionRef.current = id;
     setSessionId(id);
     setMessages([]);
+    setError("");
     loadMessages(id);
     setView("chat");
   }, [loadMessages]);
@@ -162,7 +180,7 @@ export default function ChatWidget() {
 
   const send = async (text) => {
     const content = (text ?? input).trim();
-    if (!content || sendingRef.current) return;
+    if (!content || sendingRef.current || loadingMessages || historyLoadError) return;
     sendingRef.current = true;
     setError("");
     setInput("");
@@ -172,6 +190,7 @@ export default function ChatWidget() {
       content, meta: null, created_at: new Date().toISOString(),
     }]);
     setSending(true);
+    setTyping(true);
     let sid = sessionRef.current;
     let requestStarted = false;
     try {
@@ -208,6 +227,7 @@ export default function ChatWidget() {
     const sid = sessionRef.current;
     sendingRef.current = true;
     setSending(true);
+    setTyping(true);
     try {
       const socket = await ensureSocket();
       const result = await socketRequest(socket, { type: action, session_id: sid, message_id: messageId });
@@ -219,6 +239,7 @@ export default function ChatWidget() {
     } finally {
       sendingRef.current = false;
       setSending(false);
+      setTyping(false);
     }
   };
 
@@ -350,7 +371,9 @@ export default function ChatWidget() {
 
           {view === "history" ? (
             <div className="chat-history-list">
-              {sessions.length === 0 && <div className="chat-empty">No conversations yet.</div>}
+              {loadingSessions && <div className="chat-loading" role="status"><Loader2 size={17} className="chat-spin" /> Loading conversations…</div>}
+              {!loadingSessions && sessionsError && <div className="chat-load-error" role="alert">{sessionsError}<button type="button" onClick={loadSessions}>Retry</button></div>}
+              {!loadingSessions && !sessionsError && sessions.length === 0 && <div className="chat-empty">No conversations yet.</div>}
               {sessions.map(s => (
                 <div key={s.id} className={`chat-history-item ${s.id === sessionId ? "chat-history-item--active" : ""}`}>
                   <button className="chat-history-main" onClick={() => openSession(s.id)}>
@@ -364,7 +387,9 @@ export default function ChatWidget() {
           ) : (
             <>
               <div className="chat-messages" ref={scrollRef}>
-                {messages.length === 0 && (
+                {loadingMessages && <div className="chat-loading chat-loading--messages" role="status"><Loader2 size={19} className="chat-spin" /> Loading conversation…</div>}
+                {!loadingMessages && historyLoadError && <div className="chat-load-error" role="alert">{historyLoadError}<button type="button" onClick={() => loadMessages(sessionId)}>Retry</button></div>}
+                {!loadingMessages && !historyLoadError && messages.length === 0 && (
                   <div className="chat-empty">
                     <Bot size={26} />
                     <strong>How can I help?</strong>
@@ -380,16 +405,18 @@ export default function ChatWidget() {
                     {error && <div className="chat-error">{error}</div>}
                   </div>
                 )}
-                {messages.map(m => (
+                {!loadingMessages && messages.map(m => (
                   <ChatMessageItem
                     key={m.id}
                     message={m}
+                    user={user}
+                    onNavigate={() => setOpen(false)}
                     busy={sending}
                     onConfirm={() => resolveAction(m.id, "confirm")}
                     onReject={() => resolveAction(m.id, "reject")}
                   />
                 ))}
-                {typing && (
+                {!loadingMessages && typing && (
                   <div className="chat-row chat-row--assistant">
  <div className="chat-avatar"><Bot size={13} /></div>
                     <div className="chat-bubble chat-bubble--assistant chat-bubble--typing"><i /><i /><i /></div>
@@ -410,10 +437,10 @@ export default function ChatWidget() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={listening ? "Listening… speak now" : "Type your message…"}
-                  disabled={sending}
+                  disabled={sending || loadingMessages || Boolean(historyLoadError)}
                   aria-label="Message"
                 />
-                <button className="chat-send" disabled={!input.trim() || sending} aria-label="Send message">
+                <button className="chat-send" disabled={!input.trim() || sending || loadingMessages || Boolean(historyLoadError)} aria-label="Send message">
                   {sending ? <Loader2 size={16} className="chat-spin" /> : <Send size={16} />}
                 </button>
               </form>
