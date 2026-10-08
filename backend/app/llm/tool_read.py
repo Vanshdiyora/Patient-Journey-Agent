@@ -39,6 +39,7 @@ from app.models import (
     User,
 )
 from app.services.journey_service import pathway_steps
+from app.services.patient_search import patient_search_condition
 
 JOURNEY_STATUSES = ("ACTIVE", "BLOCKED", "COMPLETED", "CANCELLED")
 PRIORITIES = ("CRITICAL", "HIGH", "MEDIUM", "LOW")
@@ -51,7 +52,8 @@ def _result(tool: str, summary: str, data: dict[str, Any]) -> dict[str, Any]:
 
 def _journeys_in_scope(
     db: Session, user, patient_id=None, status: str | None = None, priority: str | None = None,
-) -> list[Journey]:
+    offset: int = 0,
+) -> tuple[list[Journey], int]:
     q = db.query(Journey)
     if patient_id is not None:
         q = q.filter(Journey.patient_id == patient_id)
@@ -63,7 +65,9 @@ def _journeys_in_scope(
         q = q.filter(Journey.status == status)
     if priority:
         q = q.filter(Journey.priority == priority)
-    return q.order_by(Journey.updated_at.desc()).limit(25).all()
+    total = q.order_by(None).count()
+    rows = q.order_by(Journey.updated_at.desc(), Journey.id.desc()).offset(offset).limit(25).all()
+    return rows, total
 
 
 def _serialize_many(db: Session, journeys: list[Journey]) -> list[dict[str, Any]]:
@@ -83,25 +87,17 @@ def tool_search_patients(db: Session, user, args: dict[str, Any]) -> dict[str, A
     args = require_dict(args)
     staff_required(user)
     query = text_value(args.get("query"), "query", max_len=120)
-    term = f"%{query}%"
-    q = (
-        db.query(Patient)
-        .filter(
-            Patient.first_name.ilike(term)
-            | Patient.last_name.ilike(term)
-            | Patient.patient_reference.ilike(term)
-        )
-        .order_by(Patient.first_name, Patient.last_name)
-        .limit(10)
-    )
+    offset = int_value(args.get("offset", 0), "offset", 0, 1_000_000)
+    q = db.query(Patient).filter(patient_search_condition(query))
     ids = scope_patient_ids(db, user)
     if ids is not None:
         q = q.filter(Patient.id.in_(ids))
-    matches = q.all()
+    total = q.order_by(None).count()
+    matches = q.order_by(Patient.first_name, Patient.last_name, Patient.id).offset(offset).limit(10).all()
     return _result(
         "search_patients",
-        f"Found {len(matches)} patient(s) matching \"{query}\"." if matches else f"No patients match \"{query}\".",
-        {"patients": [patient_ref(p) for p in matches]},
+        f"Found {total} patient(s) matching \"{query}\"." if total else f"No patients match \"{query}\".",
+        {"patients": [patient_ref(p) for p in matches], "total": total, "offset": offset},
     )
 
 
@@ -109,16 +105,17 @@ def tool_list_patients(db: Session, user, args: dict[str, Any]) -> dict[str, Any
     args = require_dict(args)
     staff_required(user)
     limit = int_value(args.get("limit", 20), "limit", 1, 50)
+    offset = int_value(args.get("offset", 0), "offset", 0, 1_000_000)
     q = db.query(Patient)
     ids = scope_patient_ids(db, user)
     if ids is not None:
         q = q.filter(Patient.id.in_(ids))
     total = q.order_by(None).count()
-    rows = q.order_by(Patient.created_at.desc()).limit(limit).all()
+    rows = q.order_by(Patient.created_at.desc(), Patient.id.desc()).offset(offset).limit(limit).all()
     return _result(
         "list_patients",
         f"Showing {len(rows)} of {total} patient(s).",
-        {"patients": [patient_ref(p) for p in rows], "total": total},
+        {"patients": [patient_ref(p) for p in rows], "total": total, "offset": offset},
     )
 
 
@@ -130,7 +127,8 @@ def tool_get_patient_summary(db: Session, user, args: dict[str, Any]) -> dict[st
     if not patient:
         raise ToolValidationError("Patient not found")
 
-    journeys = _journeys_in_scope(db, user, patient_id=patient_id)
+    offset = int_value(args.get("offset", 0), "offset", 0, 1_000_000)
+    journeys, total = _journeys_in_scope(db, user, patient_id=patient_id, offset=offset)
     summary = {"id": str(patient.id), "name": patient_name(patient), "reference": patient.patient_reference}
     if user.role in STAFF_ROLES:
         summary["date_of_birth"] = iso(patient.date_of_birth)
@@ -138,8 +136,8 @@ def tool_get_patient_summary(db: Session, user, args: dict[str, Any]) -> dict[st
         summary["email"] = patient.email
     return _result(
         "get_patient_summary",
-        f"Patient {summary['name']} ({summary['reference']}) has {len(journeys)} journey(s).",
-        {"patient": summary, "journeys": _serialize_many(db, journeys)},
+        f"Patient {summary['name']} ({summary['reference']}) has {total} journey(s).",
+        {"patient": summary, "journeys": _serialize_many(db, journeys), "total": total, "offset": offset},
     )
 
 
@@ -172,8 +170,10 @@ def tool_list_journeys(db: Session, user, args: dict[str, Any]) -> dict[str, Any
     patient_id = None
     if args.get("patient_id") and user.role != "PATIENT":
         patient_id = target_patient_id(db, user, args)
-    journeys = _journeys_in_scope(db, user, patient_id, status, priority)
-    return _result("list_journeys", f"Found {len(journeys)} journeys.", {"journeys": _serialize_many(db, journeys)})
+    offset = int_value(args.get("offset", 0), "offset", 0, 1_000_000)
+    journeys, total = _journeys_in_scope(db, user, patient_id, status, priority, offset)
+    return _result("list_journeys", f"Found {total} journeys.",
+                   {"journeys": _serialize_many(db, journeys), "total": total, "offset": offset})
 
 
 def tool_get_journey_steps(db: Session, user, args: dict[str, Any]) -> dict[str, Any]:
@@ -303,10 +303,12 @@ def tool_list_exceptions(db: Session, user, args: dict[str, Any]) -> dict[str, A
         q = q.filter(ExceptionRecord.status == status)
     if severity:
         q = q.filter(ExceptionRecord.severity == severity)
-    rows = q.order_by(ExceptionRecord.created_at.desc()).limit(20).all()
+    offset = int_value(args.get("offset", 0), "offset", 0, 1_000_000)
+    total = q.order_by(None).count()
+    rows = q.order_by(ExceptionRecord.created_at.desc(), ExceptionRecord.id.desc()).offset(offset).limit(20).all()
     return _result(
         "list_exceptions",
-        f"Found {len(rows)} exception(s).",
+        f"Found {total} exception(s).",
         {"exceptions": [
             {
                 "id": str(e.id),
@@ -320,7 +322,7 @@ def tool_list_exceptions(db: Session, user, args: dict[str, Any]) -> dict[str, A
                 "created_at": iso(e.created_at),
             }
             for e in rows
-        ]},
+        ], "total": total, "offset": offset},
     )
 
 
@@ -334,10 +336,12 @@ def tool_list_users(db: Session, user, args: dict[str, Any]) -> dict[str, Any]:
     if args.get("search"):
         term = f"%{text_value(args['search'], 'search', max_len=120)}%"
         q = q.filter(User.email.ilike(term) | User.display_name.ilike(term))
-    rows = q.order_by(User.created_at.desc()).limit(25).all()
+    offset = int_value(args.get("offset", 0), "offset", 0, 1_000_000)
+    total = q.order_by(None).count()
+    rows = q.order_by(User.created_at.desc(), User.id.desc()).offset(offset).limit(25).all()
     return _result(
         "list_users",
-        f"Found {len(rows)} user(s).",
+        f"Found {total} user(s).",
         {"users": [
             {
                 "id": str(u.id),
@@ -347,7 +351,7 @@ def tool_list_users(db: Session, user, args: dict[str, Any]) -> dict[str, Any]:
                 "is_active": u.is_active,
             }
             for u in rows
-        ]},
+        ], "total": total, "offset": offset},
     )
 
 

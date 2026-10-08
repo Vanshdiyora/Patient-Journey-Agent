@@ -356,6 +356,8 @@ Reminders, document requests and appointment requests/reschedules are emailed to
 
 List endpoints for patients, journeys, pathways, patient journeys, journey events and actions, agent runs, exceptions, users, patient portal events, and chat sessions/messages/audit accept `limit` and `offset`. The default and maximum `limit` is 10. Responses have `items`, `total`, `limit`, and `offset`; for example, `?limit=10&offset=10` fetches the second page. `GET /api/v1/pathways` also accepts `latest_only=true` to page through the current version of each template. Dashboard summaries, the action registry, pathway selectors, and ordered journey steps remain complete views.
 
+Search and filter parameters apply to the full set of records the caller may access before pagination. `total` counts every matching record, while `items` contains only the requested page. The chat assistant's patient, journey, exception, and user list tools follow the same rule and accept `offset` to reach later matches.
+
 - `GET /api/v1/health`
 - `GET /api/v1/users/me`
 - `GET /api/v1/dashboard/summary`
