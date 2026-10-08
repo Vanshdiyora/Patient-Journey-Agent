@@ -7,8 +7,10 @@
 .sidebar--collapsed~.main-area{margin-left:76px;width:calc(100% - 76px)}
 
 .brand{height:82px;padding:0 20px;display:flex;align-items:center;gap:12px}
-.brand-mark{height:38px;width:38px;border-radius:12px;background:#65c9bd;color:#08201d;display:grid;place-items:center;font-size:24px;font-weight:700;box-shadow:0 5px 16px rgba(101,201,189,.25)}
-.brand strong{display:block;font:800 18px "Manrope",sans-serif;color:#f7fffd;letter-spacing:-.3px}
+.brand>div:not(.brand-mark){min-width:0;flex:1}
+.brand-mark{height:38px;width:38px;flex:none;border-radius:12px;background:#65c9bd;color:#08201d;display:grid;place-items:center;box-shadow:0 5px 16px rgba(101,201,189,.25)}
+.brand-mark svg{width:27px;height:27px;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand strong{display:block;font:800 16px/1.15 "Manrope",sans-serif;color:#f7fffd;letter-spacing:-.3px}
 .brand small{display:block;font-size:10px;color:#8da4a0;margin-top:2px;white-space:nowrap}
 .sidebar-toggle{margin-left:auto;color:#b7cbc7;border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.06);flex:none;transition:opacity .15s,visibility .15s}
 .sidebar-toggle:hover{background:rgba(255,255,255,.12);color:#fff}
