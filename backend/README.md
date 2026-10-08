@@ -249,28 +249,42 @@ layer the REST API uses.
 
 ### Tools (controlled registry, `app/llm/tools.py`)
 
-| Tool | Type | Roles | Notes |
-|---|---|---|---|
-| `search_patients` | read | staff | Resolve a patient by name/reference; the assistant asks which one if several match |
-| `get_patient_summary` | read | staff + own patient | Patient identity + journeys |
-| `list_pathways` | read | staff | Active pathway templates and steps |
-| `list_journeys` | read | all (scoped) | Journeys visible to the user |
-| `get_journey_steps` | read | all (scoped) | Step statuses of one journey |
-| `get_pending_tasks` | read | all (scoped) | Open (pending/ready/in-progress/blocked) steps |
-| `start_pathway` | **mutation** | staff | Requires confirmation; runs the same `journey_service.start_journey_for_patient` as `POST /patients/{id}/journeys` |
-| `submit_event` | **mutation** | all (scoped) | Requires confirmation; same rules as the events APIs |
-| `orchestrate_journey` | **mutation** | staff | Requires confirmation; re-runs the deterministic journey engine |
+Each tool is declared once as a `ToolSpec` (roles, required parameters, confirmation flag).
+Read tools (`app/llm/tool_read.py`) are plain functions over DB queries scoped to the caller.
+Mutating tools (`app/llm/tool_write.py`) call the same REST handlers / services the UI uses,
+so step-owner rules, the patient event allowlist and admin guards cannot drift.
+
+| Tool | Type | Roles |
+|---|---|---|
+| `search_patients`, `list_patients` | read | staff |
+| `get_patient_summary`, `list_journeys`, `get_journey_steps`, `get_journey_events`, `get_pending_tasks` | read | all (patients: own data only) |
+| `list_pathways`, `get_dashboard_summary`, `list_exceptions` | read | staff |
+| `list_users`, `get_chat_audit` | read | admin |
+| `start_pathway`, `orchestrate_journey`, `complete_step`, `update_step_time_limit`, `update_exception` | **mutation** | staff (`complete_step` also honours the step owner's role) |
+| `submit_event` | **mutation** | all (patients limited to patient event types, own journeys) |
+| `submit_step_update` | **mutation** | patient |
+| `set_user_role`, `set_user_status`, `create_pathway` | **mutation** | admin (cannot change own role/status from chat) |
+
+### Request pipeline (server-side, per tool call)
+
+1. **Role permission** - a task outside the user's role is answered with
+   "You are not permitted to ...", without relying on the model to refuse.
+2. **Missing information** - required parameters that are absent produce a question back to
+   the user (e.g. which patient / which pathway, with the available pathways listed).
+3. **Validation + scope dry-run** - ids, enums, ownership, step state and business rules are
+   checked before the user is ever asked to confirm; nothing is written.
+4. **Confirmation** - every mutation is stored as a `pending_action` and only runs after the user confirms.
+5. **Execution** - role and scope are checked again; permission failures are reported as "not permitted".
 
 ### Confirmation flow (server-side)
 
 1. The LLM proposes a mutation -> the backend stores a `pending_action` on the
    assistant message with a human-readable description and a 15-minute expiry.
-2. The user confirms or rejects in the chat UI (`Confirm` / `Reject` buttons or
-   natural language on the next turn).
+2. The user confirms or rejects in the chat UI (`Confirm` / `Reject` buttons).
 3. `POST /api/v1/chat/sessions/{sid}/messages/{mid}/confirm` re-validates
-   ownership (session is scoped to the authenticated user), expiry, and role —
-   then executes through the existing service layer. Results and failures are
-   reported verbatim; the assistant never claims success on failure.
+   ownership (session is scoped to the authenticated user), expiry, and role,
+   then executes. Failures roll back and are reported verbatim; the assistant
+   never claims success on failure.
 4. Expired proposals never execute; the user is told to ask again.
 
 ### Audit
@@ -280,17 +294,26 @@ expired, and read-only data access — is persisted in `chat_audit_log`
 (migration `migrations/20261007_add_chat_audit.sql`). Administrators can read
 the trail via `GET /api/v1/chat/audit`.
 
-### Run the chatbot tests
+## Orchestration agents (Orchestrate button)
 
-```powershell
-cd backend
-python tests_chat.py
-```
+`POST /journeys/{id}/orchestrate` runs the LangGraph in `app/orchestration/langgraph_supervisor.py`:
+rules -> Supervisor -> (Journey Intelligence | Coordination -> Action Executor -> rules again) -> wait / escalate.
 
-Covers tool role boundaries, start_pathway business rules, the full
-propose/confirm/reject/expire lifecycle, cross-user and invalid-id cases, LLM
-failure handling, and REST auth boundaries. The LLM is scripted, so no MAQ AI
-connectivity is required.
+**When does a step's status change?**
+
+| Who | When |
+|---|---|
+| Rule engine (every orchestrate / evaluate / event) | Pending -> Ready when earlier steps are done and dependencies are met; -> Blocked when a dependency is unmet or the step is past its due date; journey status follows. Cancelled journeys are never reopened. |
+| Agent | **Only** `Completed`, and only when all hold: the step's owner is `AGENT`; it is Ready/In progress; the action ran and passed verification; the action fulfils that step type (appointment action -> appointment/follow-up step, document request -> lab/document/referral step, reminder -> reminder/education/counselling step). Otherwise the action is sent as support and the step is untouched. |
+| Staff / patient | Complete steps through the UI, subject to the step owner's role. |
+
+Other behaviour: approval-gated actions (`CREATE_COORDINATOR_TASK`) are recorded as `REQUESTED` and surfaced as an exception, never auto-run - staff **Approve / Reject** them under *Journey actions* on the journey page (`POST /api/v1/actions/{id}/approve|reject`; approving creates a real coordinator task on the Exceptions page); `ESCALATE` opens an exception for staff; the same action for the same step is never sent twice (idempotency).
+
+**If the AI is unavailable or returns something unusable** (bad key, timeout, invalid JSON, unknown capability or action, made-up step id) the run does not fail: it continues on the built-in rules (`mode: RULES_ONLY`) and says so in the summary. The response and the saved run include `summary`, `mode`, `warnings` and `step_changes`. Saved runs use `status` SUCCESS/FAILED (DB enum); how the run ended (WAIT / ESCALATE) is `output.final_state`.
+
+### Real patient messages (SMTP)
+
+Reminders, document requests and appointment requests/reschedules are emailed to the patient's email on file when these are set in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty the actions are **simulated** and labelled "Simulated (email not configured)" everywhere in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). A patient with no email makes the action fail and the run escalate. Error text saved to `agent_runs` is scrubbed of API keys and tokens.
 
 ## Main endpoints
 

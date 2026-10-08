@@ -12,7 +12,7 @@ import { useToast } from "../../context/ToastContext";
 import StepsTimeline from "./StepsTimeline";
 import JourneyProgress from "./JourneyProgress";
 import { ContextPanel, EventsPanel, AgentActivityPanel, ActionsPanel } from "./panels";
-import AgentRunDetails from "../../components/AgentRunDetails";
+import AgentRunDetails, { finalStateLabel } from "../../components/AgentRunDetails";
 import { PATHS } from "../../routes/paths";
 
 export default function JourneyDetail() {
@@ -59,7 +59,7 @@ export default function JourneyDetail() {
     try {
       const result = await fn();
       if (type === "orchestrate") setRunResult(result);
-      const successText = type === "orchestrate" ? `Orchestration finished: ${humanize(result.status)}.` : "Evaluation completed.";
+      const successText = type === "orchestrate" ? `Orchestration finished: ${finalStateLabel(result.status)}.` : "Evaluation completed.";
       setMessage(successText);
       setMessageTone("success");
       toast.success(successText);
@@ -93,6 +93,32 @@ export default function JourneyDetail() {
       toast.error(getErrorMessage(error));
     } finally {
       setBusyStepId("");
+    }
+  };
+
+  const decideAction = async (action, approve) => {
+    const ok = await confirm({
+      title: approve ? "Approve this action?" : "Reject this action?",
+      message: approve
+        ? `"${humanize(action.action_type)}" will be carried out now and recorded under your name.`
+        : `"${humanize(action.action_type)}" will be cancelled and nothing will be sent.`,
+      confirmLabel: approve ? "Approve" : "Reject",
+      intent: approve ? "primary" : "danger",
+    });
+    if (!ok) return;
+    setBusy(`action-${action.id}`);
+    try {
+      const result = approve ? await journeysApi.approveAction(action.id) : await journeysApi.rejectAction(action.id);
+      const failed = result.status === "FAILED";
+      (failed ? toast.error : toast.success)(
+        failed ? `The action could not be completed: ${result.error_message || "unknown error"}`
+          : approve ? "Action approved and carried out." : "Action rejected."
+      );
+      await Promise.allSettled([actions.refetch(), journey.refetch(), steps.refetch(), agents.refetch()]);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusy("");
     }
   };
 
@@ -172,7 +198,7 @@ export default function JourneyDetail() {
       <div style={{ display: "contents" }}>
         <EventsPanel journeyId={j.id} eventRows={eventRows} loading={events.loading} busy={busy} onAdd={addEvent} />
         {observability && <AgentActivityPanel agentRows={agentRows} loading={agents.loading} error={agents.error} />}
-        <ActionsPanel actionRows={actionRows} loading={actions.loading} error={actions.error} />
+        <ActionsPanel actionRows={actionRows} loading={actions.loading} error={actions.error} busy={busy} onDecide={decideAction} />
       </div>
     </div>
     {confirmModal}

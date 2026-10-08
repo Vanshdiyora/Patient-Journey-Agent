@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     maq_ai_temperature: float = 0.0
     maq_ai_enabled: bool = True
 
+    # Outbound patient notifications (reminders, document/appointment requests).
+    # When smtp_host and smtp_from are empty the app uses the mock services.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+    # Safety net for testing: when set, every email goes to this address instead.
+    smtp_redirect_to: str = ""
+
     supervisor_max_iterations: int = 6
     agent_context_event_limit: int = 12
 
@@ -38,6 +49,10 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -30,3 +30,16 @@ class ActionRegistry:
         else:
             actions = ["SEND_REMINDER", "CREATE_COORDINATOR_TASK"]
         return [self.get(a) for a in actions]
+
+    # Agent-owned steps are completed only by a verified action that actually
+    # fulfils them (a reminder must not complete a lab-result step).
+    FULFILMENT_KEYWORDS = {
+        "REQUEST_APPOINTMENT": ("APPOINTMENT", "FOLLOWUP", "SCHEDUL"),
+        "RESCHEDULE_APPOINTMENT": ("APPOINTMENT", "FOLLOWUP", "SCHEDUL"),
+        "REQUEST_DOCUMENT": ("LAB", "DOCUMENT", "RESULT", "AUTH", "REFERRAL"),
+        "SEND_REMINDER": ("REMINDER", "NOTIF", "EDUCATION", "COMMUNICATION", "COUNSEL"),
+    }
+
+    def fulfils_step(self, action_type: str, step_type: str, step_code: str) -> bool:
+        haystack = f"{step_type or ''} {step_code or ''}".upper()
+        return any(k in haystack for k in self.FULFILMENT_KEYWORDS.get(action_type, ()))

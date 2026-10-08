@@ -32,4 +32,4 @@ def build_supervisor_context(db: Session, journey_id: UUID):
             "ready": item["ready"],
             "reason": item.get("reason"),
         })
-    return {"journey": {"id": str(journey.id), "status": journey.status, "priority": journey.priority}, "steps": rows, "allowed_action_types": list(ActionRegistry().get(a).action_type for a in ["REQUEST_DOCUMENT","SEND_REMINDER","REQUEST_APPOINTMENT","RESCHEDULE_APPOINTMENT","CREATE_COORDINATOR_TASK"])}
+    return {"journey": {"id": str(journey.id), "patient_id": str(journey.patient_id), "status": journey.status, "priority": journey.priority}, "steps": rows, "allowed_action_types": list(ActionRegistry().get(a).action_type for a in ["REQUEST_DOCUMENT","SEND_REMINDER","REQUEST_APPOINTMENT","RESCHEDULE_APPOINTMENT","CREATE_COORDINATOR_TASK"])}

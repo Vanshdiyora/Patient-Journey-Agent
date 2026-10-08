@@ -18,7 +18,7 @@ from app.models import Journey, JourneyStep, Patient, PatientEvent, Pathway, Pat
 from app.schemas import JourneyResponse, JourneyStepResponse, OrchestrationResponse
 from app.schemas.journey import JourneyStepComplete, JourneyStepTimeLimitUpdate
 from app.orchestration.journey_engine import JourneyEngine
-from app.orchestration.langgraph_supervisor import SupervisorGraph
+from app.orchestration.langgraph_supervisor import OrchestrationFailure, SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
 from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
 from app.rules.journey_rule_engine import JourneyRuleEngine
@@ -338,7 +338,14 @@ def orchestrate(journey_id: UUID, db: Session = Depends(get_db), user=Depends(ge
             "outcomes": result.get("outcomes", []),
             "calls": result.get("calls", []),
             "run_id": result.get("run_id"),
+            "summary": result.get("summary"),
+            "mode": result.get("mode"),
+            "warnings": result.get("warnings", []),
+            "step_changes": result.get("step_changes", []),
+            "journey_status": result.get("journey_status"),
         })
-    except Exception as exc:
+    except OrchestrationFailure as exc:
+        raise HTTPException(502, str(exc))
+    except Exception:
         db.rollback()
-        raise HTTPException(502, f"Orchestration failed: {exc}")
+        raise HTTPException(502, "Orchestration failed unexpectedly. No changes were saved.")

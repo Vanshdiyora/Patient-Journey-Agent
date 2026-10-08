@@ -15,6 +15,18 @@ export function needsDataCard(toolResult) {
       return Boolean(data.journey) && Array.isArray(data.steps) && data.steps.length > 0;
     case "get_pending_tasks":
       return Array.isArray(data.journeys) && data.journeys.some(journey => journey.tasks?.length > 0);
+    case "list_patients":
+      return Array.isArray(data.patients) && data.patients.length > 0;
+    case "get_journey_events":
+      return Array.isArray(data.events) && data.events.length > 0;
+    case "get_dashboard_summary":
+      return Boolean(data.metrics);
+    case "list_exceptions":
+      return Array.isArray(data.exceptions) && data.exceptions.length > 0;
+    case "list_users":
+      return Array.isArray(data.users) && data.users.length > 0;
+    case "get_chat_audit":
+      return Array.isArray(data.entries) && data.entries.length > 0;
     default:
       return false;
   }

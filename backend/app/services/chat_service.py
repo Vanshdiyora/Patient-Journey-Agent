@@ -2,12 +2,17 @@
 Chat assistant service layer.
 
 Owns conversation persistence, the LLM tool-calling loop, and the two-step
-"propose -> confirm -> execute" flow for mutating tools. All tool execution is
-delegated to app.llm.tools which re-checks the user's authorization at
-execution time — the LLM is never trusted for permission decisions.
+"propose -> confirm -> execute" flow for mutating tools. The LLM is never
+trusted for permission decisions; for every tool call the server itself:
 
-Every state-changing event (action proposed / confirmed / executed / failed /
-rejected / expired) is written to chat_audit_log.
+  1. denies tasks the user's role may not perform ("You are not permitted ..."),
+  2. asks the user for any required information that is missing,
+  3. validates arguments and scope without writing anything,
+  4. asks the user to confirm every state-changing action before it runs,
+  5. re-checks authorization when the confirmed action executes.
+
+Every event (proposed / confirmed / executed / failed / rejected / expired /
+denied / needs_info / data_access) is written to chat_audit_log.
 """
 import json
 from datetime import datetime, timedelta, timezone
@@ -39,30 +44,33 @@ def _utcnow() -> datetime:
 
 
 def _system_prompt(user: User) -> str:
-    """Role-aware instructions. The role/scope are stated for tone only —
-    real authorization always happens server-side in the tool executors."""
+    """Role-aware instructions. The role/scope are stated for grounding only —
+    real authorization always happens server-side before any tool runs."""
+    can, _cannot = chat_tools.role_capabilities(user.role)
     return (
         "You are CarePath Assistant, an in-app copilot for a patient-journey orchestrator. "
-        "You help staff and patients inspect journeys and record updates.\n"
-        f"The signed-in user's role is {user.role}; their data scope is: {scope_note(user)}.\n"
+        "You look up data and carry out actions for the signed-in user by calling tools.\n"
+        f"The signed-in user is {user.display_name}, role {user.role}; data scope: {scope_note(user)}.\n"
+        f"Tasks this role can do: {', '.join(can)}.\n"
         "Rules:\n"
         "- Answer in the user's language, briefly and helpfully.\n"
-        "- You may call tools to look up data or to propose updates. Authorization is "
-        "enforced server-side regardless of what you say or ask for.\n"
-        "- To talk about a patient by name, resolve them first with search_patients. If "
-        "several patients match, list the matches and ask the user to pick one — never "
-        "guess a patient id. If none match, say so.\n"
-        "- To start a pathway you need patient_id and pathway_id: resolve the patient "
-        "with search_patients and the pathway with list_pathways. If the requested "
-        "pathway is ambiguous, ask which one.\n"
-        "- Mutating tools (start_pathway, submit_event, orchestrate_journey) REQUIRE "
-        "explicit user confirmation. Summarize what will change in plain language; the "
-        "app collects confirmation via the UI. Never claim a change is done unless a "
-        "tool result says so.\n"
-        "- If a journey id is missing, call list_journeys or get_patient_summary first, "
-        "or ask a short clarifying question.\n"
-        "- Never invent journey ids, patient data, or medical advice. If the user asks "
-        "for something no tool supports, say you can't help with that."
+        "- Get every fact by calling a tool; never answer from memory or invent ids, data or "
+        "medical advice. Present tool results in plain language (names, not UUIDs).\n"
+        "- If the user asks for ANY task, still call the matching tool even if you think their role "
+        "may not allow it. The server decides permissions and replies with the standard "
+        "'You are not permitted' message. Never refuse or explain permissions yourself.\n"
+        "- If required information is missing or ambiguous, ask the user one short question "
+        "instead of guessing. Resolve names yourself first: search_patients for patients, "
+        "list_pathways for pathways, list_journeys / get_patient_summary / get_journey_steps for "
+        "journeys and steps, list_users for users, list_exceptions for exceptions. If several "
+        "match, list them and ask which one; if none match, say so.\n"
+        "- Tools that change data (start_pathway, submit_event, complete_step, "
+        "submit_step_update, update_step_time_limit, orchestrate_journey, update_exception, "
+        "set_user_role, set_user_status, create_pathway) are never run directly: call the tool "
+        "with complete arguments and the app shows the user a confirmation card. Do not ask for "
+        "confirmation in text and never claim a change is done unless a tool result says so.\n"
+        "- Propose one change at a time. If the user asks for something no tool supports, say you "
+        "can't help with that."
     )
 
 
@@ -203,6 +211,95 @@ def _pending_is_expired(pending: dict[str, Any]) -> bool:
     return _utcnow() > expires_at
 
 
+def _error_text(exc: Exception) -> str:
+    return str(getattr(exc, "detail", None) or exc)
+
+
+def _handle_tool_call(
+    db: Session, user: User, session: ChatSession, name: str, args: Any,
+    pending_so_far: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """
+    Gate one model-proposed tool call. Returns one of:
+      final   - server-authored reply for the user (not permitted / info needed)
+      pending - a mutating action stored for the user's confirmation
+      result  - a read tool ran; its data goes back to the model
+      error   - recoverable problem; the model gets the message and can retry/ask
+    """
+    args = args if isinstance(args, dict) else {}
+    spec = chat_tools.get_spec(name)
+    target_id = args.get("patient_id") or args.get("journey_id")
+
+    def deny(reason: str | None = None) -> dict[str, Any]:
+        text = chat_tools.denial_message(user, spec, reason)
+        audit(db, user=user, session=session, tool_name=name, event="denied",
+              target_entity=name, target_entity_id=target_id, parameters=args,
+              permission_result="denied", detail=text)
+        return {"kind": "final", "text": text,
+                "notice": {"permission_denied": {"tool": name, "role": user.role}}}
+
+    def error(text: str) -> dict[str, Any]:
+        return {"kind": "error", "error": text,
+                "tool_message": json.dumps({"status": "error", "error": text})}
+
+    if spec is None:
+        return error(f"Unknown tool: {name}")
+
+    # 1. Role permission - decided by the server, never by the model.
+    if not chat_tools.is_allowed(user, spec):
+        return deny()
+
+    # 2. Missing information - ask the user instead of guessing.
+    args, missing = chat_tools.missing_arguments(db, user, spec, args)
+    if missing:
+        text = chat_tools.missing_message(db, spec, missing)
+        audit(db, user=user, session=session, tool_name=name, event="needs_info",
+              target_entity=name, parameters=args, detail="missing: " + ", ".join(missing))
+        return {"kind": "final", "text": text, "notice": {"needs_info": {"tool": name, "missing": missing}}}
+
+    # 3. Validation + scope checks (nothing is written).
+    try:
+        args = chat_tools.prepare_arguments(db, user, spec, args)
+    except chat_tools.ToolPermissionError as exc:
+        return deny(_error_text(exc))
+    except HTTPException as exc:
+        return deny(_error_text(exc)) if exc.status_code in (401, 403) else error(_error_text(exc))
+    except chat_tools.ToolValidationError as exc:
+        return error(_error_text(exc))
+
+    # 4. Mutations are proposed, never run: the user confirms in the UI.
+    if spec.confirm:
+        if pending_so_far:
+            return error("Only one change can be confirmed at a time; propose this one after the first is handled.")
+        pending = {
+            "name": name,
+            "arguments": args,
+            "status": PENDING,
+            "expires_at": _pending_expires_at(),
+            "description": chat_tools.describe_action(db, user, name, args),
+        }
+        audit(db, user=user, session=session, tool_name=name, event="proposed",
+              target_entity=name, target_entity_id=target_id, parameters=args)
+        return {"kind": "pending", "pending": pending,
+                "tool_message": json.dumps({"status": "awaiting_confirmation"})}
+
+    # 5. Reads run immediately, scoped to the user by the tool itself.
+    try:
+        result = chat_tools.execute_tool(db, user, name, args)
+    except chat_tools.ToolPermissionError as exc:
+        return deny(_error_text(exc))
+    except HTTPException as exc:
+        return deny(_error_text(exc)) if exc.status_code in (401, 403) else error(_error_text(exc))
+    except chat_tools.ToolValidationError as exc:
+        audit(db, user=user, session=session, tool_name=name, event="denied",
+              target_entity=name, permission_result="denied", detail=_error_text(exc))
+        return error(_error_text(exc))
+    audit(db, user=user, session=session, tool_name=name, event="data_access",
+          target_entity=name, permission_result="allowed")
+    return {"kind": "result", "result": result,
+            "tool_message": json.dumps(result, default=str)[:6000]}
+
+
 def process_user_message(
     db: Session,
     user: User,
@@ -237,16 +334,15 @@ def process_user_message(
     assistant_text = ""
     tool_results: list[dict[str, Any]] = []
     pending_action: dict[str, Any] | None = None
+    notice: dict[str, Any] = {}  # permission_denied / needs_info marker for the UI
 
     try:
         convo = [{"role": "system", "content": _system_prompt(user)}]
         convo += _history_for_llm(db, session)  # includes the just-saved user turn
 
+        finished = False
         for _ in range(6):  # bounded loop; keep in sync with supervisor_max_iterations
-            response = client.chat_with_tools(
-                messages=convo,
-                tools=chat_tools.tools_for_role(user.role),
-            )
+            response = client.chat_with_tools(messages=convo, tools=chat_tools.tools_for_llm())
             message = response.choices[0].message
 
             if not message.tool_calls:
@@ -267,64 +363,30 @@ def process_user_message(
                 ],
             })
 
-            awaiting = False
             for tc in message.tool_calls:
-                name = tc.function.name
                 try:
                     tool_args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     tool_args = {}
+                outcome = _handle_tool_call(db, user, session, tc.function.name, tool_args, pending_action)
 
-                if chat_tools.toolRequiresConfirmation(name):
-                    pending_action = {
-                        "name": name,
-                        "arguments": tool_args,
-                        "status": PENDING,
-                        "expires_at": _pending_expires_at(),
-                        "description": chat_tools.describe_action(db, user, name, tool_args),
-                    }
-                    awaiting = True
-                    audit(
-                        db, user=user, session=session, tool_name=name, event="proposed",
-                        target_entity=name,
-                        target_entity_id=tool_args.get("patient_id") or tool_args.get("journey_id"),
-                        parameters=tool_args,
-                    )
-                    convo.append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": json.dumps({"status": "awaiting_confirmation"}),
-                    })
-                else:
-                    try:
-                        result = chat_tools.execute_tool(db, user, name, tool_args)
-                        tool_results.append({"tool": name, "status": "ok", "result": result})
-                        audit(
-                            db, user=user, session=session, tool_name=name,
-                            event="data_access", target_entity=name,
-                            permission_result="allowed",
-                        )
-                        convo.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": json.dumps(result, default=str)[:4000],
-                        })
-                    except (chat_tools.ToolValidationError, HTTPException) as exc:
-                        detail = getattr(exc, "detail", None) or str(exc)
-                        tool_results.append({"tool": name, "status": "error", "error": detail})
-                        audit(
-                            db, user=user, session=session, tool_name=name,
-                            event="denied", target_entity=name,
-                            permission_result="denied", detail=detail,
-                        )
-                        convo.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": json.dumps({"status": "error", "error": detail}),
-                        })
+                if outcome["kind"] == "final":
+                    # Server-authored reply (not permitted / need more info): stop here.
+                    assistant_text = outcome["text"]
+                    notice = outcome["notice"]
+                    pending_action = None
+                    finished = True
+                    break
+                if outcome["kind"] == "pending":
+                    pending_action = outcome["pending"]
+                elif outcome["kind"] == "result":
+                    tool_results.append({"tool": tc.function.name, "status": "ok", "result": outcome["result"]})
+                else:  # recoverable error: let the model fix its arguments or ask the user
+                    tool_results.append({"tool": tc.function.name, "status": "error", "error": outcome["error"]})
+                convo.append({"role": "tool", "tool_call_id": tc.id, "content": outcome["tool_message"]})
 
-            if awaiting:
-                break  # pause: the user must confirm before execution
+            if finished or pending_action:
+                break  # a final reply, or the user must confirm before anything runs
         else:
             assistant_text = assistant_text or (
                 "I could not complete that request — please rephrase or ask something else."
@@ -336,7 +398,7 @@ def process_user_message(
         db.rollback()
         raise HTTPException(502, f"Assistant failed: {exc}")
 
-    meta: dict[str, Any] = {}
+    meta: dict[str, Any] = dict(notice)
     if tool_results:
         meta["tool_results"] = tool_results
     if pending_action:
@@ -413,23 +475,30 @@ def confirm_action(db: Session, user: User, session_id: UUID, message_id: UUID) 
     args = pending.get("arguments", {})
     audit(db, user=user, session=session, message=msg, tool_name=name,
           event="confirmed", target_entity=name, parameters=args)
+    db.commit()  # keep the "confirmed" audit row even if execution fails and rolls back
+    spec = chat_tools.get_spec(name)
     try:
         result = chat_tools.execute_tool(db, user, name, args)
         _set_pending_status(msg, pending, EXECUTED, result=result)
         audit(db, user=user, session=session, message=msg, tool_name=name,
               event="executed", target_entity=name,
-              target_entity_id=(result.get("data", {}) or {}).get("journey", {}).get("id")
-              if isinstance(result.get("data"), dict) else None,
+              target_entity_id=(result.get("data") or {}).get("journey", {}).get("id")
+              if isinstance(result.get("data"), dict) and isinstance(result["data"].get("journey"), dict) else None,
               parameters=args, detail=result.get("summary"))
         outcome_text = result.get("summary", "Action completed.")
-    except (chat_tools.ToolValidationError, HTTPException) as exc:
-        detail = getattr(exc, "detail", None) or str(exc)
+    except (chat_tools.ToolValidationError, chat_tools.ToolPermissionError, HTTPException) as exc:
+        db.rollback()  # discard anything the failed action half-wrote
+        detail = _error_text(exc)
+        denied = isinstance(exc, chat_tools.ToolPermissionError) or (
+            isinstance(exc, HTTPException) and exc.status_code in (401, 403)
+        )
+        if denied:
+            detail = chat_tools.denial_message(user, spec, detail)
         _set_pending_status(msg, pending, FAILED, error=detail)
         audit(db, user=user, session=session, message=msg, tool_name=name,
               event="failed", target_entity=name, parameters=args,
-              permission_result="denied" if "permission" in detail.lower() or "cannot" in detail.lower() else "allowed",
-              detail=detail)
-        outcome_text = f"The action could not be completed: {detail}"
+              permission_result="denied" if denied else "allowed", detail=detail)
+        outcome_text = detail if denied else f"The action could not be completed: {detail}"
 
     outcome_msg = _add_message(db, session, "assistant", outcome_text, {"action_result": {
         "message_id": str(msg.id),

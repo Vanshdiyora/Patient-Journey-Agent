@@ -47,13 +47,23 @@ export function AgentActivityPanel({ agentRows, loading, error }) {
   </Panel>;
 }
 
-export function ActionsPanel({ actionRows, loading, error }) {
+export function ActionsPanel({ actionRows, loading, error, busy, onDecide }) {
   return <Panel title="Journey actions" subtitle="Recorded action executions for this journey" headerIcon={Sparkles}>
     {error ? <ErrorState error={error} title="Could not load journey actions" /> : loading ? <SkeletonRows count={3} /> : actionRows.length ? <div className="journey-actions">{actionRows.map(a => <div className="journey-action" key={a.id}>
-      <div className="journey-action-head"><Sparkles size={15} /><span><strong>{humanize(a.action_type)}</strong><small>{formatDate(a.requested_at, true)}</small></span><Badge value={a.status} /></div>
+      <div className="journey-action-head"><Sparkles size={15} /><span><strong>{humanize(a.action_type)}</strong><small>{formatDate(a.requested_at, true)}</small></span><Badge value={a.status} fallback={a.status === "REQUESTED" ? "Awaiting approval" : undefined} /></div>
+      {a.status === "REQUESTED" && <div className="journey-action-approval">
+        <p>{a.response_payload?.reason || "Needs staff approval before it can run."}</p>
+        {onDecide && <div className="journey-action-buttons">
+          <button className="primary-btn" disabled={!!busy} onClick={() => onDecide(a, true)}>{busy === `action-${a.id}` ? "Working…" : "Approve"}</button>
+          <button className="secondary-btn" disabled={!!busy} onClick={() => onDecide(a, false)}>Reject</button>
+        </div>}
+      </div>}
+      {a.response_payload?.delivery && a.status === "SUCCESS" && <small className="journey-action-delivery">
+        {a.response_payload.delivery === "email" ? "Delivered by email" : a.response_payload.delivery === "in_app" ? "Created as an in-app task" : "Simulated - email is not configured"}
+      </small>}
       {a.response_payload && <details className="run-json"><summary>Execution response</summary><pre>{JSON.stringify(a.response_payload, null, 2)}</pre></details>}
       {a.error_message && <p className="form-error">{a.error_message}</p>}
     </div>)}</div> : <EmptyState small title="No actions recorded" text="Orchestration may decide to wait or escalate without executing an action." />}
-    <p className="run-boundary">Scheduling, reminders, and document handling currently use mock services.</p>
+    <p className="run-boundary">Reminders and requests are emailed to patients when SMTP is configured; otherwise they are simulated and labelled as such.</p>
   </Panel>;
 }
