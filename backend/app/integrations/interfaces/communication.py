@@ -1,3 +1,0 @@
-from typing import Protocol, Any
-class CommunicationService(Protocol):
-    def send_reminder(self, payload: dict[str, Any]) -> dict[str, Any]: ...

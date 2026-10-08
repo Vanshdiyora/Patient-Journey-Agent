@@ -1,14 +1,5 @@
-export { default as PageHeading } from "./PageHeading";
-export { default as Panel } from "./Panel";
-export { default as EmptyState } from "./EmptyState";
-export { default as ErrorState } from "./ErrorState";
-export { default as Badge } from "./Badge";
-export { default as Pagination } from "./Pagination";
-export { default as JsonView } from "./JsonView";
-export { default as AlertBanner } from "./AlertBanner";
-export { default as MetricCard } from "./MetricCard";
+export { AlertBanner, Badge, EmptyState, ErrorState, JsonView, MetricCard, PageHeading, Pagination, Panel, TabBar } from "./ui";
 export { default as Brand } from "./Brand";
-export { default as TabBar } from "./TabBar";
 export { SkeletonRows, DetailSkeleton } from "./Skeletons";
 export { default as Select } from "./Select";
 export { SearchBox, FilterSelect, ResultCount } from "./Toolbar";

@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Calendar, CheckCircle2, ChevronDown, LockKeyhole, Mail, ShieldCheck, Sparkles, User as UserIcon } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import { authApi } from "../../services";
-import Brand from "../../components/Brand";
-import { getErrorMessage } from "../../utils";
-import { ROLES } from "../../utils/roles";
+import { useAuth } from "../context/AuthContext";
+import { authApi } from "../services";
+import Brand from "../components/Brand";
+import { getErrorMessage } from "../utils";
+import { ROLES } from "../utils/roles";
 
 const ROLE_OPTIONS = [
   { value: ROLES.PATIENT, label: "Patient" },

@@ -6,7 +6,7 @@ from app.core.authorization import require_staff, scope_patient_ids
 from app.models import Patient, Journey, Pathway, ExceptionRecord
 from app.schemas import PatientResponse, JourneyResponse
 from app.schemas.journey import JourneyCreate
-from app.api.v1.journey_views import journey_with_pathway, journeys_with_pathways
+from app.services.journey_views import journey_with_pathway, journeys_with_pathways
 from app.services.journey_service import start_journey_for_patient
 
 router = APIRouter()

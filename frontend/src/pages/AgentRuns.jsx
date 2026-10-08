@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Bot, ChevronDown, ChevronRight, Clock3 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { agentsApi } from "../../services";
-import { useAsync } from "../../hooks/useAsync";
-import { formatDate, formatDuration, humanize, toList } from "../../utils";
-import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, Pagination } from "../../components";
-import AgentRunDetails from "../../components/AgentRunDetails";
-import { PATHS, buildPath } from "../../routes/paths";
+import { agentsApi } from "../services";
+import { useAsync } from "../hooks/useAsync";
+import { formatDate, formatDuration, humanize, toList } from "../utils";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, Pagination } from "../components";
+import AgentRunDetails from "../components/AgentRunDetails";
+import { PATHS, buildPath } from "../routes/paths";
 
 export default function AgentRuns() {
   const [searchParams] = useSearchParams();

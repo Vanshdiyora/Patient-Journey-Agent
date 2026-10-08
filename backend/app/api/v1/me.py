@@ -23,7 +23,7 @@ from app.schemas.patient_event import (
     PatientStepSubmission,
 )
 from app.schemas import JourneyResponse, JourneyStepResponse
-from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
+from app.services.journey_views import journeys_with_pathways, steps_with_pathway_details
 from app.services.journey_service import sync_journey_to_active_pathway
 
 router = APIRouter(prefix="/me", tags=["patient"])

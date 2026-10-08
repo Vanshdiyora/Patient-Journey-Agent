@@ -1,6 +1,0 @@
-/*
- * Compatibility entrypoint. The stylesheet is now layered under src/styles/;
- * main.jsx imports "./styles" (this file) exactly as before, so no other
- * file needs to know the split happened. New code should import "../styles".
- */
-@import "./styles/index.css";

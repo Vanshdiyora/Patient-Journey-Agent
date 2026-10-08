@@ -6,8 +6,8 @@ if (!Number.isFinite(apiTimeoutMs) || apiTimeoutMs <= 0) {
 }
 
 /**
- * The single axios instance for the app. Resource modules (auth.js,
- * patients.js, ...) import `api` from here and never build their own clients,
+ * The single axios instance for the app. Resource clients in api.js and
+ * chat.js import it here and never build their own clients,
  * so interceptors (token attach, 401 logout, error shape) stay consistent.
  */
 const api = axios.create({

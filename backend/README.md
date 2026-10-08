@@ -17,6 +17,36 @@ This backend implements the architecture from the project approach document:
 
 All protected API routes require an email/password login and a signed bearer token. User passwords are stored as bcrypt hashes.
 
+## Code layout
+
+```text
+backend/
+  app/
+    main.py             FastAPI entry point
+    api/v1/              Versioned HTTP endpoints
+    api/ws_chat.py       WebSocket endpoint
+    auth.py              Login, signup, and token helpers
+    core/                Settings, database session, and authorization
+    models/              SQLAlchemy tables, one file per table group
+    schemas/             Request and response models by resource
+    services/            Shared journey and chat use cases/read models
+    rules/               Deterministic journey rules
+    orchestration/       Event processing and agent workflow
+    agents/              Supervisor, coordination, and journey intelligence
+    llm/                 Model client and chat tools
+    action_registry/     Supported actions and validation
+    integrations/        Service protocols and local mock adapters
+    audit/               Persisted audit and trace helpers
+  migrations/            Ordered SQL migrations
+  scripts/               Database setup and demo data tools
+```
+
+The URL version is set by `app.core.config.Settings.api_prefix`; Python route
+modules remain in `app/api/v1/`. Shared read models live in `app/services/`
+so staff and patient endpoints use the same representations. New code should
+extend an existing module when the concern is small, and add a file when a
+module has a clear independent responsibility.
+
 ## Complete Neon database setup
 
 Create an empty database or branch in Neon, then copy its full connection URL
