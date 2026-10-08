@@ -167,6 +167,7 @@
 /* Event forms (journey detail add event, patient report form) */
 .event-form{border-top:1px solid #edf0f0;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .event-form-title{font-size:10px;font-weight:700;color:#62716e;display:flex;align-items:center;gap:6px}
+.event-form>label{display:flex;flex-direction:column;gap:5px;font-size:9px;font-weight:600;color:#62716e}
 .event-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .event-form input,.event-form textarea,.event-form select{border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:8px 9px;outline:0;font-size:10px;color:#394b47}
 .event-form .select-root{width:100%}
@@ -175,6 +176,7 @@
 .event-form textarea{font:9px/1.5 ui-monospace,monospace;resize:vertical}
 .event-form input:focus,.event-form textarea:focus,.event-form select:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .event-form .primary-btn{align-self:flex-end;height:34px;font-size:10px}
+.event-form-note{margin:0;font-size:9px;color:#899592}
 .event-form-error{display:flex;align-items:center;gap:6px;background:#fff6f6;color:#9c4147;border:1px solid #f0d3d5;border-radius:7px;padding:7px 9px;font-size:10px}
 
 /* Login */

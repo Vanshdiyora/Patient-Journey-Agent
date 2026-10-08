@@ -129,11 +129,13 @@ export default function JourneyDetail() {
       setMessageTone("success");
       toast.success("Event added successfully.");
       await events.refetch();
+      return true;
     } catch (err) {
       const errorText = getErrorMessage(err);
       setMessage(errorText);
       setMessageTone("error");
       toast.error(errorText);
+      return false;
     } finally {
       setBusy("");
     }
