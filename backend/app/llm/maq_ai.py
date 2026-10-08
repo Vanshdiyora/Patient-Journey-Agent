@@ -6,20 +6,42 @@ from app.core.config import settings
 
 class MAQAIClient:
     def __init__(self):
+        if not settings.maq_ai_base_url:
+            raise RuntimeError("MAQ_AI_BASE_URL is not configured")
         if not settings.maq_ai_api_key:
             raise RuntimeError("MAQ_AI_API_KEY is not configured")
+        if not settings.maq_ai_model:
+            raise RuntimeError("MAQ_AI_MODEL is not configured")
+        if settings.maq_ai_timeout_seconds is None:
+            raise RuntimeError("MAQ_AI_TIMEOUT_SECONDS is not configured")
+        if settings.maq_ai_max_retries is None:
+            raise RuntimeError("MAQ_AI_MAX_RETRIES is not configured")
+
+        client_options: dict[str, Any] = {
+            "base_url": settings.maq_ai_base_url,
+            "api_key": settings.maq_ai_api_key,
+            "timeout": settings.maq_ai_timeout_seconds,
+            "max_retries": settings.maq_ai_max_retries,
+        }
         self.client = OpenAI(
-            base_url=settings.maq_ai_base_url,
-            api_key=settings.maq_ai_api_key,
-            timeout=settings.maq_ai_timeout_seconds,
+            **client_options,
         )
         self.model = settings.maq_ai_model
 
     def chat(self, messages: list[dict[str, str]], temperature: float | None = None) -> str:
+        request_options: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+        }
+        configured_temperature = (
+            temperature
+            if temperature is not None
+            else settings.maq_ai_temperature
+        )
+        if configured_temperature is not None:
+            request_options["temperature"] = configured_temperature
         response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=settings.maq_ai_temperature if temperature is None else temperature,
+            **request_options,
         )
         return response.choices[0].message.content or ""
 
@@ -32,8 +54,9 @@ class MAQAIClient:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": settings.maq_ai_temperature,
         }
+        if settings.maq_ai_temperature is not None:
+            kwargs["temperature"] = settings.maq_ai_temperature
         if tools:
             kwargs["tools"] = tools
         return self.client.chat.completions.create(**kwargs)

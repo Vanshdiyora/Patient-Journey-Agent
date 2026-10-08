@@ -54,6 +54,8 @@ def _system_prompt(user: User) -> str:
         f"Tasks this role can do: {', '.join(can)}.\n"
         "Rules:\n"
         "- Answer in the user's language, briefly and helpfully.\n"
+        "- Format replies for a narrow chat panel: use short paragraphs or bullets, "
+        "and avoid tables unless the user explicitly asks for one. Do not dump raw JSON.\n"
         "- Get every fact by calling a tool; never answer from memory or invent ids, data or "
         "medical advice. Present tool results in plain language (names, not UUIDs).\n"
         "- If the user asks for ANY task, still call the matching tool even if you think their role "
@@ -69,6 +71,11 @@ def _system_prompt(user: User) -> str:
         "set_user_role, set_user_status, create_pathway) are never run directly: call the tool "
         "with complete arguments and the app shows the user a confirmation card. Do not ask for "
         "confirmation in text and never claim a change is done unless a tool result says so.\n"
+        "- For complete_step, resolve the requested patient/journey and step by calling "
+        "get_journey_steps; use only a matching READY or IN_PROGRESS step. Never mark a step "
+        "complete just because the user asked: ask whether the care task was actually performed "
+        "if that is not clear. The confirmation card is the final staff attestation. If the step "
+        "is BLOCKED, explain its blocker and do not propose completion.\n"
         "- Propose one change at a time. If the user asks for something no tool supports, say you "
         "can't help with that."
     )
@@ -124,12 +131,12 @@ def create_session(db: Session, user: User, title: str | None = None) -> ChatSes
     return session
 
 
-def list_sessions(db: Session, user: User) -> list[ChatSession]:
+def list_sessions(db: Session, user: User, limit: int = 10, offset: int = 0) -> list[ChatSession]:
     return (
         db.query(ChatSession)
         .filter(ChatSession.user_id == user.id, ChatSession.is_archived.is_(False))
-        .order_by(ChatSession.updated_at.desc())
-        .limit(50)
+        .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
+        .offset(offset).limit(limit)
         .all()
     )
 
@@ -152,15 +159,16 @@ def archive_session(db: Session, user: User, session_id: UUID) -> ChatSession:
     return session
 
 
-def get_messages(db: Session, user: User, session_id: UUID, limit: int = 200) -> list[ChatMessage]:
+def get_messages(db: Session, user: User, session_id: UUID, limit: int = 10, offset: int = 0) -> list[ChatMessage]:
     session = get_session_for_user(db, user, session_id)
-    return (
+    rows = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == session.id)
-        .order_by(ChatMessage.created_at.asc())
-        .limit(limit)
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        .offset(offset).limit(limit)
         .all()
     )
+    return list(reversed(rows))
 
 
 def _add_message(db: Session, session: ChatSession, role: str, content: str,
@@ -535,11 +543,11 @@ def reject_action(db: Session, user: User, session_id: UUID, message_id: UUID) -
     return {"session": session, "message": msg}
 
 
-def list_audit(db: Session, limit: int = 200) -> list[ChatAuditLog]:
+def list_audit(db: Session, limit: int = 10, offset: int = 0) -> list[ChatAuditLog]:
     """Admin-facing audit trail (newest first)."""
     return (
         db.query(ChatAuditLog)
-        .order_by(ChatAuditLog.created_at.desc())
-        .limit(min(max(limit, 1), 500))
+        .order_by(ChatAuditLog.created_at.desc(), ChatAuditLog.id.desc())
+        .offset(offset).limit(limit)
         .all()
     )

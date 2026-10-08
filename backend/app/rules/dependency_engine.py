@@ -20,19 +20,48 @@ class DependencyEngine:
                 satisfied = source.status == "COMPLETED"
                 reason = "Source step completed" if satisfied else "Source step is not completed"
             elif dep.condition_type == "RESULT_AVAILABLE":
-                events = self.db.query(PatientEvent).filter(PatientEvent.journey_id == journey_id).order_by(PatientEvent.event_time.desc()).limit(50).all()
+                target = self.db.query(JourneyStep).filter(
+                    JourneyStep.pathway_step_id == dep.target_step_id,
+                    JourneyStep.journey_id == journey_id,
+                ).first()
+                events = (
+                    self.db.query(PatientEvent)
+                    .filter(PatientEvent.journey_id == journey_id)
+                    .order_by(PatientEvent.event_time.desc())
+                    .limit(50)
+                    .all()
+                )
                 for event in events:
                     payload = event.payload or {}
-                    if event.event_type == "LAB_RESULT_AVAILABLE" or payload.get("result_available") is True:
+                    evidence_step_id = payload.get("journey_step_id")
+                    targets_this_step = (
+                        target is not None
+                        and evidence_step_id is not None
+                        and str(evidence_step_id) == str(target.id)
+                    )
+                    if targets_this_step and (
+                        event.event_type == "LAB_RESULT_AVAILABLE"
+                        or payload.get("result_available") is True
+                    ):
                         evidence.append({"event_id": str(event.id), "event_type": event.event_type})
                         satisfied = True
                         break
                 reason = "Required result evidence found" if satisfied else "Required result evidence is missing"
             elif dep.condition_type == "APPROVED":
+                target = self.db.query(JourneyStep).filter(
+                    JourneyStep.pathway_step_id == dep.target_step_id,
+                    JourneyStep.journey_id == journey_id,
+                ).first()
                 events = self.db.query(PatientEvent).filter(PatientEvent.journey_id == journey_id).order_by(PatientEvent.event_time.desc()).limit(50).all()
                 for event in events:
                     payload = event.payload or {}
-                    if event.event_type in {"AUTHORIZATION_APPROVED", "APPROVAL_RECEIVED"} or payload.get("approved") is True:
+                    approval_for_this_step = (
+                        event.event_type == "STEP_APPROVAL_EVIDENCE_RECORDED"
+                        and target is not None
+                        and str(payload.get("journey_step_id")) == str(target.id)
+                        and payload.get("approved") is True
+                    )
+                    if approval_for_this_step or event.event_type in {"AUTHORIZATION_APPROVED", "APPROVAL_RECEIVED"}:
                         evidence.append({"event_id": str(event.id), "event_type": event.event_type})
                         satisfied = True
                         break

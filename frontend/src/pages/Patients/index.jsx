@@ -16,7 +16,7 @@ export default function Patients() {
   const { active: tab, select: setTab } = useTabs("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const limit = 20;
+  const limit = 10;
   const { data, loading, error } = useAsync(
     () => patientsApi.list({ search: search || undefined, filter: tab || undefined, limit, offset }),
     [search, offset, tab]
@@ -59,7 +59,7 @@ export default function Patients() {
               ))}</tbody>
             </table></div>
           ) : <EmptyState icon={Users} title="No patients here" text={`No patients match "${activeTab?.label}". Try another tab or clear the search.`} />}
-      <Pagination offset={offset} limit={limit} count={patients.length} onPage={setOffset} />
+      {!loading && !error && <Pagination offset={offset} limit={limit} count={patients.length} total={data?.total ?? patients.length} onPage={setOffset} />}
     </Panel>
   </div>;
 }

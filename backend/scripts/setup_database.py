@@ -52,11 +52,20 @@ def main():
     url = os.environ.get("DATABASE_URL") or dotenv_values(ROOT / "backend" / ".env").get("DATABASE_URL")
     if not url:
         parser.error("Set DATABASE_URL in backend/.env first.")
+    timeout_value = os.environ.get("DATABASE_CONNECT_TIMEOUT_SECONDS") or dotenv_values(
+        ROOT / "backend" / ".env"
+    ).get("DATABASE_CONNECT_TIMEOUT_SECONDS")
+    try:
+        connect_timeout = int(timeout_value)
+    except (TypeError, ValueError):
+        parser.error("Set DATABASE_CONNECT_TIMEOUT_SECONDS to a positive number of seconds.")
+    if connect_timeout <= 0:
+        parser.error("DATABASE_CONNECT_TIMEOUT_SECONDS must be a positive number of seconds.")
     url = re.sub(r"^postgresql\+psycopg2://", "postgresql://", url)
     if not url.startswith(("postgresql://", "postgres://")):
         parser.error("DATABASE_URL must be a PostgreSQL connection URL.")
     try:
-        with psycopg2.connect(url, connect_timeout=30) as connection:
+        with psycopg2.connect(url, connect_timeout=connect_timeout) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SET search_path TO public")
                 if not args.verify_only:

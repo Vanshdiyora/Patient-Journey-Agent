@@ -13,7 +13,7 @@ This backend implements the architecture from the project approach document:
 - Mock scheduling / communication / document / clinical-event services
 - Audit / agent trace persistence
 - PostgreSQL as the source of truth
-- MAQ AI through the OpenAI-compatible API at `https://llm.maqsoftware.net/v1`
+- Optional AI through an environment-configured OpenAI-compatible API
 
 All protected API routes require an email/password login and a signed bearer token. User passwords are stored as bcrypt hashes.
 
@@ -219,25 +219,32 @@ Sign in at `/login` with a seeded user's email and `Test@123`. The backend
 verifies the bcrypt hash and returns a JWT. Protected routes reject requests
 without a valid bearer token; there is no implicit development-user bypass.
 
-## MAQ AI
+## AI provider configuration
 
-The provider is configured in `app/llm/maq_ai.py` and uses the same OpenAI-compatible pattern:
+The optional OpenAI-compatible provider is configured only through environment
+variables (or deployment secrets): `MAQ_AI_ENABLED`, `MAQ_AI_BASE_URL`,
+`MAQ_AI_API_KEY`, `MAQ_AI_MODEL`, `MAQ_AI_TIMEOUT_SECONDS`, and
+`MAQ_AI_MAX_RETRIES`. `MAQ_AI_TEMPERATURE` is optional. Copy
+`backend/.env.example` to `backend/.env`, then fill in the provider values for
+your deployment. Do not commit credentials. AI is disabled when
+`MAQ_AI_ENABLED` is unset or false.
 
-```python
-from openai import OpenAI
+The agents use this client through `app/llm/provider.py`, so the agent contracts
+do not depend directly on the provider implementation. If AI is enabled but
+required provider settings are missing, client initialization reports the
+missing setting instead of silently choosing a provider or model.
 
-client = OpenAI(
-    base_url="https://llm.maqsoftware.net/v1",
-    api_key="sk-...",
-)
+Network timeouts are configured in `backend/.env`: `MAQ_AI_TIMEOUT_SECONDS`,
+`SMTP_TIMEOUT_SECONDS`, and `DATABASE_CONNECT_TIMEOUT_SECONDS` are specified in
+seconds. The frontend API timeout is configured separately as
+`VITE_API_TIMEOUT_MS` in milliseconds.
 
-resp = client.chat.completions.create(
-    model="qwen-3.8-27b",
-    messages=[{"role": "user", "content": "Hello, MAQ AI!"}],
-)
-```
-
-The agents use this client through `app/llm/provider.py`, so the agent contracts do not depend directly on the provider implementation.
+Step evidence files are stored outside the web root in
+`backend/private_storage/step-evidence` by default. Set `EVIDENCE_STORAGE_DIR`
+to a private, persistent volume path in deployments. The directory is excluded
+from Git; it must not be served as static content. For production or real
+patient data, use an encrypted, access-controlled persistent volume with
+backups, and restrict downloads through the authenticated API.
 
 ## Chatbot assistant (CarePath Assistant)
 
@@ -316,6 +323,8 @@ Other behaviour: approval-gated actions (`CREATE_COORDINATOR_TASK`) are recorded
 Reminders, document requests and appointment requests/reschedules are emailed to the patient's email on file when these are set in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty the actions are **simulated** and labelled "Simulated (email not configured)" everywhere in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). A patient with no email makes the action fail and the run escalate. Error text saved to `agent_runs` is scrubbed of API keys and tokens.
 
 ## Main endpoints
+
+List endpoints for patients, journeys, pathways, patient journeys, journey events and actions, agent runs, exceptions, users, patient portal events, and chat sessions/messages/audit accept `limit` and `offset`. The default and maximum `limit` is 10. Responses have `items`, `total`, `limit`, and `offset`; for example, `?limit=10&offset=10` fetches the second page. `GET /api/v1/pathways` also accepts `latest_only=true` to page through the current version of each template. Dashboard summaries, the action registry, pathway selectors, and ordered journey steps remain complete views.
 
 - `GET /api/v1/health`
 - `GET /api/v1/users/me`

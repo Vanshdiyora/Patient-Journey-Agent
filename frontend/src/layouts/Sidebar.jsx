@@ -59,7 +59,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
           <Brand />
           {expanded && (
             <div>
-              <strong>Patient</strong>
+              <strong>Patient Journey</strong>
               <small>{portal.label}</small>
             </div>
           )}

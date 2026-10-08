@@ -25,6 +25,8 @@ def _mask(address: str) -> str:
 
 
 def send_email(to: str, subject: str, body: str) -> dict[str, Any]:
+    if settings.smtp_timeout_seconds is None:
+        raise RuntimeError("SMTP_TIMEOUT_SECONDS is not configured")
     recipient = settings.smtp_redirect_to or to
     message = EmailMessage()
     message["From"] = settings.smtp_from
@@ -33,7 +35,11 @@ def send_email(to: str, subject: str, body: str) -> dict[str, Any]:
     message["Message-ID"] = make_msgid()
     message.set_content(body if not settings.smtp_redirect_to else f"(Intended for {to})\n\n{body}")
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+        with smtplib.SMTP(
+            settings.smtp_host,
+            settings.smtp_port,
+            timeout=settings.smtp_timeout_seconds,
+        ) as smtp:
             if settings.smtp_use_tls:
                 smtp.starttls(context=ssl.create_default_context())
             if settings.smtp_username:

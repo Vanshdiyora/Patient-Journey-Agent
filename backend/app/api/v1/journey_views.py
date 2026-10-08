@@ -16,10 +16,16 @@ def journeys_with_pathways(db: Session, journeys: list[Journey]) -> list[dict]:
 
 
 def steps_with_pathway_details(db: Session, journey_id) -> list[dict]:
+    journey = db.query(Journey).filter(Journey.id == journey_id).first()
+    if journey is None:
+        return []
     rows = (
         db.query(JourneyStep, PathwayStep)
         .join(PathwayStep, JourneyStep.pathway_step_id == PathwayStep.id)
-        .filter(JourneyStep.journey_id == journey_id)
+        .filter(
+            JourneyStep.journey_id == journey_id,
+            PathwayStep.pathway_id == journey.pathway_id,
+        )
         .order_by(PathwayStep.sequence_number)
         .all()
     )

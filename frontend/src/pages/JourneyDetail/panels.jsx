@@ -1,40 +1,38 @@
 import React, { useState } from "react";
-import { Bot, CalendarClock, ChevronDown, ChevronRight, FileJson, Sparkles } from "lucide-react";
-import { journeysApi } from "../../services";
-import { useAsync } from "../../hooks/useAsync";
+import { Bot, CalendarClock, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { formatDate, humanize } from "../../utils";
-import { JsonView, Panel, EmptyState, ErrorState, SkeletonRows, Badge } from "../../components";
+import { Panel, EmptyState, ErrorState, SkeletonRows, Badge, Pagination } from "../../components";
 import AgentRunDetails from "../../components/AgentRunDetails";
 import AddEventForm from "./AddEventForm";
 
-export function ContextPanel({ journeyId }) {
-  const { data, loading } = useAsync(() => journeysApi.context(journeyId), [journeyId]);
-  return <Panel title="Orchestration context" subtitle="Decision context" headerIcon={FileJson}>
-    {loading ? <div className="mini-loader" /> : <JsonView data={data} />}
-  </Panel>;
-}
-
-export function EventsPanel({ eventRows, loading, busy, onAdd }) {
+export function EventsPanel({ journeyId, eventRows, loading, error, busy, onAdd, onDownloadEvidence, offset, total, onPage }) {
   return <Panel title="Events" subtitle="Journey event stream" headerIcon={CalendarClock}>
-    {loading ? <SkeletonRows count={4} /> : eventRows.length ? <div className="event-list">{eventRows.slice(0, 10).map(e =>
+    {error ? <ErrorState error={error} title="Could not load events" /> : loading ? <SkeletonRows count={4} /> : eventRows.length ? <div className="event-list">{eventRows.map(e =>
       <div className="event-row" key={e.id}>
         <div>
           <strong>{humanize(e.event_type)}</strong>
           <span>{e.source} · {formatDate(e.event_time, true)}</span>
           {e.payload?.comment && <span>{e.payload.comment}</span>}
+          {e.payload?.details && <span>{e.payload.details}</span>}
+          {e.payload?.file_id && onDownloadEvidence && <button
+            className="text-link event-evidence-download"
+            type="button"
+            onClick={() => onDownloadEvidence(journeyId, e.payload.journey_step_id, e.payload.file_id, e.payload.file_name)}
+          >Download {e.payload.file_name || "evidence"}</button>}
         </div>
         <span className={`event-dot ${e.processed ? "event-dot--done" : ""}`} />
       </div>
     )}</div> : <EmptyState small title="No events" />}
+    {!loading && !error && <Pagination offset={offset} count={eventRows.length} total={total ?? 0} onPage={onPage} />}
     <AddEventForm busy={busy === "event"} onAdd={onAdd} />
   </Panel>;
 }
 
-export function AgentActivityPanel({ agentRows, loading, error }) {
+export function AgentActivityPanel({ agentRows, loading, error, offset, total, onPage }) {
   const [expanded, setExpanded] = useState(null);
   return <Panel title="Agent activity" subtitle="Latest agent runs for this journey" headerIcon={Bot}>
     {error ? <ErrorState error={error} title="Could not load agent activity" /> : loading ? <SkeletonRows count={3} /> : agentRows.length ?
-      <div className="journey-run-list">{agentRows.slice(0, 8).map(a => <div className="journey-run" key={a.id}>
+      <div className="journey-run-list">{agentRows.map(a => <div className="journey-run" key={a.id}>
         <button className="journey-run-head" type="button" aria-expanded={expanded === a.id} onClick={() => setExpanded(expanded === a.id ? null : a.id)}>
           <Bot size={16} />
           <span><strong>{humanize(a.agent_name)}</strong><small>{formatDate(a.started_at, true)}</small></span>
@@ -43,11 +41,11 @@ export function AgentActivityPanel({ agentRows, loading, error }) {
         </button>
         {expanded === a.id && <AgentRunDetails run={a} />}
       </div>)}</div> : <EmptyState small title="No agent runs" />}
-    {agentRows.length > 8 && <p className="run-boundary">Showing 8 of {agentRows.length} recent records.</p>}
+    {!loading && !error && <Pagination offset={offset} count={agentRows.length} total={total ?? 0} onPage={onPage} />}
   </Panel>;
 }
 
-export function ActionsPanel({ actionRows, loading, error, busy, onDecide }) {
+export function ActionsPanel({ actionRows, loading, error, busy, onDecide, offset, total, onPage }) {
   return <Panel title="Journey actions" subtitle="Recorded action executions for this journey" headerIcon={Sparkles}>
     {error ? <ErrorState error={error} title="Could not load journey actions" /> : loading ? <SkeletonRows count={3} /> : actionRows.length ? <div className="journey-actions">{actionRows.map(a => <div className="journey-action" key={a.id}>
       <div className="journey-action-head"><Sparkles size={15} /><span><strong>{humanize(a.action_type)}</strong><small>{formatDate(a.requested_at, true)}</small></span><Badge value={a.status} fallback={a.status === "REQUESTED" ? "Awaiting approval" : undefined} /></div>
@@ -64,6 +62,7 @@ export function ActionsPanel({ actionRows, loading, error, busy, onDecide }) {
       {a.response_payload && <details className="run-json"><summary>Execution response</summary><pre>{JSON.stringify(a.response_payload, null, 2)}</pre></details>}
       {a.error_message && <p className="form-error">{a.error_message}</p>}
     </div>)}</div> : <EmptyState small title="No actions recorded" text="Orchestration may decide to wait or escalate without executing an action." />}
+    {!loading && !error && <Pagination offset={offset} count={actionRows.length} total={total ?? 0} onPage={onPage} />}
     <p className="run-boundary">Reminders and requests are emailed to patients when SMTP is configured; otherwise they are simulated and labelled as such.</p>
   </Panel>;
 }

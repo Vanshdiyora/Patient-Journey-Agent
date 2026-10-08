@@ -3,7 +3,7 @@ import { CheckCircle2, Clock3, FileText, HeartPulse } from "lucide-react";
 import { formatDate } from "../../utils";
 
 /** Patient overview KPI cards. */
-export default function JourneyMetrics({ stepRows, eventRows, nextStep, done }) {
+export default function JourneyMetrics({ stepRows, eventTotal, processedTotal, nextStep, done }) {
   return (
     <section className="metric-grid">
       <div className="metric-card">
@@ -16,11 +16,11 @@ export default function JourneyMetrics({ stepRows, eventRows, nextStep, done }) 
       </div>
       <div className="metric-card">
         <div className="metric-icon metric-icon--amber"><FileText size={20} /></div>
-        <div className="metric-copy"><span>Updates sent</span><strong>{eventRows.length}</strong><small>{eventRows.filter(e => !e.processed).length} awaiting review</small></div>
+        <div className="metric-copy"><span>Updates sent</span><strong>{eventTotal}</strong><small>{eventTotal - processedTotal} awaiting review</small></div>
       </div>
       <div className="metric-card">
         <div className="metric-icon metric-icon--green"><CheckCircle2 size={20} /></div>
-        <div className="metric-copy"><span>Reviewed by team</span><strong>{eventRows.filter(e => e.processed).length}</strong><small>Updates processed</small></div>
+        <div className="metric-copy"><span>Reviewed by team</span><strong>{processedTotal}</strong><small>Updates processed</small></div>
       </div>
     </section>
   );

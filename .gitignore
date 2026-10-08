@@ -38,6 +38,7 @@ pnpm-debug.log*
 *.sqlite3
 *.db
 *.log
+backend/private_storage/
 
 # Editors and operating systems
 .idea/

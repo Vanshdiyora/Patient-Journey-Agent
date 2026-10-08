@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Network, UserRound } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { journeysApi, patientsApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { formatDate, getErrorMessage, initials, humanize, toList } from "../../utils";
-import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton, Select } from "../../components";
+import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton, Select, Pagination, SkeletonRows } from "../../components";
 import { useToast } from "../../context/ToastContext";
 
 function Detail({ label, value }) {
@@ -13,8 +13,10 @@ function Detail({ label, value }) {
 
 export default function PatientDetail() {
   const { patientId } = useParams();
+  const [journeyOffset, setJourneyOffset] = useState(0);
+  useEffect(() => { setJourneyOffset(0); }, [patientId]);
   const patient = useAsync(() => patientsApi.get(patientId), [patientId]);
-  const journeys = useAsync(() => patientsApi.journeys(patientId), [patientId]);
+  const journeys = useAsync(() => patientsApi.journeys(patientId, { limit: 10, offset: journeyOffset }), [patientId, journeyOffset]);
   const pathways = useAsync(() => journeysApi.availablePathways(), []);
   const toast = useToast();
   const [pathwayId, setPathwayId] = useState("");
@@ -51,7 +53,8 @@ export default function PatientDetail() {
           Object.entries(timeLimits).map(([stepId, hours]) => [stepId, Number(hours)])
         ),
       });
-      await journeys.refetch();
+      if (journeyOffset === 0) await journeys.refetch();
+      else setJourneyOffset(0);
       setPathwayId("");
       setTimeLimits({});
       toast.success("Care journey started. The patient can now see it after signing in or refreshing their portal.");
@@ -116,8 +119,7 @@ export default function PatientDetail() {
           )}
           {formError && <div className="event-form-error" role="alert">{formError}</div>}
         </form>
-        {journeys.error && <ErrorState error={journeys.error} title="Could not load journeys" />}
-        {js.length ? (
+        {journeys.error ? <ErrorState error={journeys.error} title="Could not load journeys" /> : journeys.loading ? <SkeletonRows /> : js.length ? (
           <div className="journey-list">{js.map(j => (
             <Link className="journey-card" key={j.id} to={`/journeys/${j.id}`}>
               <div className="journey-card-icon"><Network size={20} /></div>
@@ -127,6 +129,7 @@ export default function PatientDetail() {
             </Link>
           ))}</div>
         ) : <EmptyState icon={ClipboardList} title="No journeys found" text="This patient has no associated journeys." />}
+        {!journeys.loading && !journeys.error && <Pagination offset={journeyOffset} count={js.length} total={journeys.data?.total ?? 0} onPage={setJourneyOffset} />}
       </Panel>
 
       <Panel title="Patient information" subtitle="Core demographic details">

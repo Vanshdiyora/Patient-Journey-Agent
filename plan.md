@@ -21,7 +21,7 @@ frontend is a multi-portal React UI where each role sees a themed portal with ro
 | Supervisor Agent | `backend/app/agents/supervisor/` | LangGraph conditional supervisor loop |
 | Action Registry | `backend/app/action_registry/` | Allow-list of actions agents may request |
 | Rule engines | `backend/app/rules/journey_rule_engine.py`, `escalation_engine.py` | Deterministic step/escalation rules |
-| LLM provider | `backend/app/llm/provider.py` → MAQ AI (`https://llm.maqsoftware.net/v1`, model `qwen-3.8-27b`) | OpenAI-compatible client |
+| LLM provider | `backend/app/llm/provider.py` | Optional OpenAI-compatible client, configured by environment |
 | Audit | `backend/app/audit/` | Agent trace persistence |
 
 **Safety boundary:** LLMs never directly write protected journey completion state and never
@@ -48,7 +48,7 @@ npm run dev              # VITE_API_BASE_URL=http://localhost:8000
 ```
 
 ### Environment
-- `backend/.env`: `DATABASE_URL`, `AUTH_JWT_SECRET`, `AUTH_JWT_EXPIRES_MINUTES`, `CORS_ORIGINS`, `MAQ_AI_*`, `SUPERVISOR_MAX_ITERATIONS`
+- `backend/.env`: `DATABASE_URL`, `AUTH_JWT_SECRET`, `AUTH_JWT_EXPIRES_MINUTES`, `CORS_ORIGINS`, optional `MAQ_AI_*`, `SUPERVISOR_MAX_ITERATIONS`
 - `frontend/.env`: `VITE_API_BASE_URL`
 - Backend reads `.env` from the backend project dir regardless of CWD. If `DEBUG` env var is non-boolean, set `$env:DEBUG = "false"`.
 

@@ -23,11 +23,12 @@ def _normalize(value: str | None, valid: tuple[str, ...], field: str) -> str:
     return v
 
 
-@router.get("/exceptions", response_model=list[ExceptionResponse])
+@router.get("/exceptions")
 def exceptions(
     status: str | None = None,
     severity: str | None = None,
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(10, ge=1, le=10),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     user=Depends(require_staff),
 ):
@@ -52,7 +53,9 @@ def exceptions(
         if unknown:
             raise HTTPException(422, f"Unknown severity: {', '.join(unknown)}")
         q = q.filter(ExceptionRecord.severity.in_(wanted))
-    return q.order_by(ExceptionRecord.created_at.desc()).limit(limit).all()
+    items = q.order_by(ExceptionRecord.created_at.desc(), ExceptionRecord.id.desc()).offset(offset).limit(limit).all()
+    return {"items": [ExceptionResponse.model_validate(item).model_dump(mode="json") for item in items],
+            "total": q.order_by(None).count(), "limit": limit, "offset": offset}
 
 
 @router.patch("/exceptions/{exception_id}", response_model=ExceptionResponse)

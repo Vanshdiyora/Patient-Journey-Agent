@@ -383,6 +383,7 @@ def describe_action(db: Session, user, name: str, args: dict[str, Any]) -> dict[
             description.update({
                 "title": f"Complete step: {step}" if step else "Complete step", "patient": patient,
                 "changes": [
+                    "Confirm the care task was actually performed",
                     f"Mark \"{step or 'the step'}\" as completed" + (f" on {pathway}" if pathway else ""),
                     "Record your confirmation in the journey history",
                     "Re-evaluate the journey and unlock follow-up steps",
@@ -434,4 +435,3 @@ def describe_action(db: Session, user, name: str, args: dict[str, Any]) -> dict[
     except Exception:  # noqa: BLE001 — description is cosmetic only
         pass
     return description
-

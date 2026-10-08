@@ -23,17 +23,20 @@ class Settings(BaseSettings):
         "http://localhost:5173",
     ]
 
-    maq_ai_base_url: str = "https://llm.maqsoftware.net/v1"
-    maq_ai_api_key: str = ""
-    maq_ai_model: str = "qwen-3.8-27b"
-    maq_ai_timeout_seconds: int = 600
-    maq_ai_temperature: float = 0.0
-    maq_ai_enabled: bool = True
+    maq_ai_base_url: str | None = None
+    maq_ai_api_key: str | None = None
+    maq_ai_model: str | None = None
+    maq_ai_timeout_seconds: int | None = None
+    maq_ai_max_retries: int | None = None
+    maq_ai_temperature: float | None = None
+    maq_ai_enabled: bool | None = None
+    evidence_storage_dir: Path = BACKEND_DIR / "private_storage" / "step-evidence"
 
     # Outbound patient notifications (reminders, document/appointment requests).
     # When smtp_host and smtp_from are empty the app uses the mock services.
     smtp_host: str = ""
     smtp_port: int = 587
+    smtp_timeout_seconds: int | None = None
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from: str = ""

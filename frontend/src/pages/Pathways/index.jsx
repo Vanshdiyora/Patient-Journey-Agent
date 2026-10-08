@@ -3,7 +3,7 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import { pathwaysApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../../utils";
-import { PageHeading, Panel, ErrorState, EmptyState, Badge, Select } from "../../components";
+import { PageHeading, Panel, ErrorState, EmptyState, Badge, Select, Pagination } from "../../components";
 import { useToast } from "../../context/ToastContext";
 import PathwayEditDrawer from "./PathwayEditDrawer";
 
@@ -20,7 +20,8 @@ const OWNER_ROLES = ["PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "STAFF
 const OWNER_ROLE_OPTIONS = OWNER_ROLES.map(role => ({ value: role, label: humanize(role) }));
 
 export default function Pathways() {
-  const pathways = useAsync(() => pathwaysApi.list(), []);
+  const [offset, setOffset] = useState(0);
+  const pathways = useAsync(() => pathwaysApi.list({ latest_only: true, limit: 10, offset }), [offset]);
   const toast = useToast();
   const [form, setForm] = useState({
     code: "",
@@ -31,10 +32,7 @@ export default function Pathways() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null);
-  const rows = Array.from(toList(pathways.data).reduce((latest, pathway) => {
-    if (!latest.has(pathway.code) || latest.get(pathway.code).version < pathway.version) latest.set(pathway.code, pathway);
-    return latest;
-  }, new Map()).values());
+  const rows = toList(pathways.data, "items");
 
   const updateStep = (index, key, value) => {
     setForm(current => ({
@@ -152,7 +150,7 @@ export default function Pathways() {
       </form>
     </Panel>
 
-    <Panel wide title="Existing pathways" subtitle={`${rows.length} pathway templates`}>
+    <Panel wide title="Existing pathways" subtitle={`${pathways.data?.total ?? rows.length} pathway templates`}>
       {pathways.error ? <ErrorState error={pathways.error} title="Could not load pathways" /> :
         pathways.loading ? <div className="skeleton-list"><div className="skeleton-row"><i /><i /><i /><i /></div></div> :
           rows.length ? <div className="pathway-list">
@@ -176,6 +174,7 @@ export default function Pathways() {
               </details>
             ))}
           </div> : <EmptyState small title="No pathways found" text="Create the first pathway above." />}
+      {!pathways.loading && !pathways.error && <Pagination offset={offset} count={rows.length} total={pathways.data?.total ?? 0} onPage={setOffset} />}
     </Panel>
     {editing && <PathwayEditDrawer key={editing.id} pathway={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); pathways.refetch().catch(() => {}); }} />}
   </div>;
