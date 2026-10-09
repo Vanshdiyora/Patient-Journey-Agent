@@ -17,6 +17,36 @@ This backend implements the architecture from the project approach document:
 
 All protected API routes require an email/password login and a signed bearer token. User passwords are stored as bcrypt hashes.
 
+## Code layout
+
+```text
+backend/
+  app/
+    main.py             FastAPI entry point
+    api/v1/              Versioned HTTP endpoints
+    api/ws_chat.py       WebSocket endpoint
+    auth.py              Login, signup, and token helpers
+    core/                Settings, database session, and authorization
+    models/              SQLAlchemy tables, one file per table group
+    schemas/             Request and response models by resource
+    services/            Shared journey and chat use cases/read models
+    rules/               Deterministic journey rules
+    orchestration/       Event processing and agent workflow
+    agents/              Supervisor, coordination, and journey intelligence
+    llm/                 Model client and chat tools
+    action_registry/     Supported actions and validation
+    integrations/        Service protocols and local mock adapters
+    audit/               Persisted audit and trace helpers
+  migrations/            Ordered SQL migrations
+  scripts/               Database setup and demo data tools
+```
+
+The URL version is set by `app.core.config.Settings.api_prefix`; Python route
+modules remain in `app/api/v1/`. Shared read models live in `app/services/`
+so staff and patient endpoints use the same representations. New code should
+extend an existing module when the concern is small, and add a file when a
+module has a clear independent responsibility.
+
 ## Complete Neon database setup
 
 Create an empty database or branch in Neon, then copy its full connection URL
@@ -325,6 +355,8 @@ Reminders, document requests and appointment requests/reschedules are emailed to
 ## Main endpoints
 
 List endpoints for patients, journeys, pathways, patient journeys, journey events and actions, agent runs, exceptions, users, patient portal events, and chat sessions/messages/audit accept `limit` and `offset`. The default and maximum `limit` is 10. Responses have `items`, `total`, `limit`, and `offset`; for example, `?limit=10&offset=10` fetches the second page. `GET /api/v1/pathways` also accepts `latest_only=true` to page through the current version of each template. Dashboard summaries, the action registry, pathway selectors, and ordered journey steps remain complete views.
+
+Search and filter parameters apply to the full set of records the caller may access before pagination. `total` counts every matching record, while `items` contains only the requested page. The chat assistant's patient, journey, exception, and user list tools follow the same rule and accept `offset` to reach later matches.
 
 - `GET /api/v1/health`
 - `GET /api/v1/users/me`

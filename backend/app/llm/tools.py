@@ -73,6 +73,8 @@ JOURNEY_ID = _s("Journey id (UUID). Get it from list_journeys / get_patient_summ
 PATIENT_ID = _s("Patient id (UUID). Resolve a name with search_patients first.")
 STEP_ID = _s("Journey step id (UUID). Get it from get_journey_steps.")
 PRIORITY = _s("One of CRITICAL, HIGH, MEDIUM, LOW (default MEDIUM).", enum=["CRITICAL", "HIGH", "MEDIUM", "LOW"])
+OFFSET = {"type": "integer", "minimum": 0, "maximum": 1000000,
+          "description": "Skip this many matching records (default 0)"}
 
 _STAFF_EVENTS = ", ".join(write.STAFF_EVENT_TYPES)
 _PATIENT_EVENTS = ", ".join(write.PATIENT_EVENT_TYPES)
@@ -81,23 +83,29 @@ SPECS: tuple[ToolSpec, ...] = (
     # ----- read -----------------------------------------------------------
     ToolSpec(
         "search_patients", "search the patient directory",
-        "Search patients by first/last name or reference id. Use it to resolve a patient mentioned by "
-        "name before acting on them. If several match, ask the user which one.",
+        "Search the full patient directory by first name, last name, full name, or reference id. "
+        "Results are paged; use total to distinguish no match from more matches. "
+        "Use it to resolve a patient mentioned by name before acting on them. "
+        "If several match, ask the user which one, using patient references.",
         STAFF, read.tool_search_patients,
-        {"query": _s("Name or patient reference to search for")}, ("query",),
+        {
+            "query": _s("Name or patient reference to search for"),
+            "offset": OFFSET,
+        }, ("query",),
         ask={"query": "which patient (name or patient reference)"},
     ),
     ToolSpec(
         "list_patients", "list patients",
-        "List patients in the user's scope (most recent first).",
+        "List patients in the user's scope (most recent first). Results include the full matching count; use offset for later pages.",
         STAFF, read.tool_list_patients,
-        {"limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "How many (default 20)"}},
+        {"limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "How many (default 20)"},
+         "offset": OFFSET},
     ),
     ToolSpec(
         "get_patient_summary", "view a patient's summary",
-        "Get a patient's identity and their journeys. Patients get their own record; staff must pass patient_id.",
+        "Get a patient's identity and their journeys. Results include the full journey count; use offset for later pages. Patients get their own record; staff must pass patient_id.",
         ALL_ROLES, read.tool_get_patient_summary,
-        {"patient_id": PATIENT_ID},
+        {"patient_id": PATIENT_ID, "offset": OFFSET},
     ),
     ToolSpec(
         "list_pathways", "list care pathways",
@@ -106,12 +114,13 @@ SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "list_journeys", "list journeys",
-        "List journeys visible to the user (most recent first), optionally filtered.",
+        "List journeys visible to the user (most recent first), optionally filtered. Results include the full matching count; use offset for later pages.",
         ALL_ROLES, read.tool_list_journeys,
         {
             "status": _s("ACTIVE, BLOCKED, COMPLETED or CANCELLED", enum=list(read.JOURNEY_STATUSES)),
             "priority": _s("CRITICAL, HIGH, MEDIUM or LOW", enum=list(read.PRIORITIES)),
             "patient_id": _s("Only this patient's journeys (staff only)."),
+            "offset": OFFSET,
         },
     ),
     ToolSpec(
@@ -142,20 +151,22 @@ SPECS: tuple[ToolSpec, ...] = (
     ),
     ToolSpec(
         "list_exceptions", "list exceptions",
-        "List workflow exceptions (alerts), optionally filtered by status or severity.",
+        "List workflow exceptions (alerts), optionally filtered by status or severity. Results include the full matching count; use offset for later pages.",
         STAFF, read.tool_list_exceptions,
         {
             "status": _s("OPEN, IN_PROGRESS, RESOLVED or DISMISSED", enum=list(read.EXCEPTION_STATUSES)),
             "severity": _s("CRITICAL, HIGH, MEDIUM or LOW", enum=list(read.PRIORITIES)),
+            "offset": OFFSET,
         },
     ),
     ToolSpec(
         "list_users", "view user accounts",
-        "List portal user accounts (find a user's id before changing their role or status).",
+        "List portal user accounts (find a user's id before changing their role or status). Results include the full matching count; use offset for later pages.",
         ADMIN, read.tool_list_users,
         {
             "role": _s("Filter by role", enum=list(write.ROLES)),
             "search": _s("Name or email to search for"),
+            "offset": OFFSET,
         },
     ),
     ToolSpec(
@@ -227,8 +238,8 @@ SPECS: tuple[ToolSpec, ...] = (
         },
     ),
     ToolSpec(
-        "orchestrate_journey", "re-evaluate a journey",
-        "Re-run journey orchestration/evaluation for a journey. Requires user confirmation.",
+        "orchestrate_journey", "run orchestration for a patient journey",
+        "Run or re-evaluate journey orchestration for a patient journey. Requires user confirmation.",
         STAFF, write.tool_orchestrate_journey,
         {"journey_id": JOURNEY_ID}, ("journey_id",), confirm=True,
         ask={"journey_id": "which journey (patient name, pathway, or journey id)"},

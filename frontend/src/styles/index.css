@@ -1,6 +1,6 @@
 /*
- * Styles entrypoint — imports layers in cascade order. Feature code imports
- * "../styles" (this file) only; never individual layers.
+ * Styles entrypoint — imported once by main.jsx. Feature code should use
+ * the shared classes instead of importing individual layers.
  *
  * Order matters:
  *   1. tokens      — design tokens + element resets

@@ -1,9 +1,9 @@
 import React from "react";
 import { Activity, ChevronRight, CircleCheck, Zap } from "lucide-react";
-import { actionsApi } from "../../services";
-import { useAsync } from "../../hooks/useAsync";
-import { humanize, toList } from "../../utils";
-import { PageHeading, Panel, EmptyState, ErrorState, SkeletonRows } from "../../components";
+import { actionsApi } from "../services";
+import { useAsync } from "../hooks/useAsync";
+import { humanize, toList } from "../utils";
+import { PageHeading, Panel, EmptyState, ErrorState, SkeletonRows } from "../components";
 
 export default function ActionRegistry() {
   const { data, loading, error } = useAsync(() => actionsApi.registry(), []);

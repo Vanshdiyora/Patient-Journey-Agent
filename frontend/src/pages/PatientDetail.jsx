@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, CalendarDays, ChevronRight, ClipboardList, Network, UserRound } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import { journeysApi, patientsApi } from "../../services";
-import { useAsync } from "../../hooks/useAsync";
-import { formatDate, getErrorMessage, initials, humanize, toList } from "../../utils";
-import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton, Select, Pagination, SkeletonRows } from "../../components";
-import { useToast } from "../../context/ToastContext";
+import { journeysApi, patientsApi } from "../services";
+import { useAsync } from "../hooks/useAsync";
+import { formatDate, getErrorMessage, initials, humanize, toList } from "../utils";
+import { Panel, EmptyState, ErrorState, Badge, DetailSkeleton, Select, Pagination, SkeletonRows } from "../components";
+import { useToast } from "../context/ToastContext";
 
 function Detail({ label, value }) {
   return <div className="detail-row"><span>{label}</span><strong>{value || "—"}</strong></div>;

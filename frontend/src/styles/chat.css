@@ -85,6 +85,12 @@
 .chat-action-confirm:disabled,.chat-action-reject:disabled{opacity:.55;cursor:not-allowed}
 .chat-action-outcome{margin-top:8px;font-size:10.5px;color:#1d7045;line-height:1.5}
 .chat-action-outcome--error{color:#9c3d43}
+.chat-needs-info-form{display:flex;gap:6px;align-items:center;padding:5px 6px;background:#fff;border:1px solid var(--line);border-radius:9px}
+.chat-needs-info-form:focus-within{border-color:var(--teal);box-shadow:0 0 0 2px rgba(11,113,107,.1)}
+.chat-needs-info-form input{min-width:0;flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:11px;color:#263835;padding:5px}
+.chat-needs-info-form input::placeholder{color:#9aa6a3}
+.chat-needs-info-form button{width:28px;height:28px;border:0;border-radius:7px;background:var(--teal);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+.chat-needs-info-form button:disabled{opacity:.45;cursor:not-allowed}
 
 .chat-empty{min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#84918e;text-align:center;padding:20px}
 .chat-empty strong{color:#51615e;font-size:12.5px;font-family:"Manrope",sans-serif}
@@ -92,7 +98,9 @@
 .chat-loading{display:flex;align-items:center;justify-content:center;gap:9px;padding:20px 12px;color:#60716d;font-size:11px}
 .chat-loading svg{color:var(--teal);flex:none}
 .chat-loading--messages{flex:1;min-height:150px}
+.chat-loading--more{min-height:0;padding:8px 12px;flex:none}
 .chat-load-error{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:9px;min-height:150px;padding:18px;color:#9c3d43;font-size:11px;text-align:center}
+.chat-load-error--more{min-height:0;padding:10px}
 .chat-load-error button{border:1px solid #e6c4c4;border-radius:8px;background:#fff;color:#8a2f22;padding:5px 12px;font-weight:700}
 
 .chat-history-list{flex:1;overflow-y:auto;padding:8px}
@@ -183,6 +191,3 @@
   .chat-launcher-wrap{right:14px;bottom:14px}
   .chat-panel{right:8px;bottom:76px;width:calc(100vw - 16px);height:calc(100vh - 100px)}
 }
-.chat-history-pagination{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;color:#71807c;font-size:11px}
-.chat-history-pagination button{border:0;background:transparent;color:var(--teal);font-size:11px;font-weight:700;cursor:pointer}
-.chat-history-pagination button:disabled{color:#aab5b2;cursor:default}

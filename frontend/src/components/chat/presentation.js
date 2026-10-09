@@ -43,3 +43,26 @@ export function readResultPresentation(message) {
     || "I couldn't find a result for that request.";
   return { kind: "text", text };
 }
+
+export function inlineInfoPrompt(message) {
+  const meta = message?.meta || {};
+  if (meta.needs_info) return meta.needs_info;
+  if (
+    message?.role !== "assistant"
+    || meta.pending_action
+    || meta.action_result
+    || meta.permission_denied
+    || readResultPresentation(message).kind !== "text"
+  ) return null;
+
+  const text = message.content || "";
+  if (
+    /\b(?:which|what)\s+(?:specific\s+)?journey\b/i.test(text)
+    || /\bjourney\s+(?:do you mean|are you referring to|should i|would you like)\b/i.test(text)
+  ) return { missing: ["journey_id"] };
+  if (
+    /\b(?:which|what)\s+patient\b/i.test(text)
+    || /\b(?:patient'?s name|name of (?:the )?patient|patient reference)\b/i.test(text)
+  ) return { missing: ["patient_id"] };
+  return null;
+}

@@ -1,7 +1,7 @@
-import React from "react";
-import { AlertTriangle, Ban, Check, ChevronRight, Clock, Loader2, User, Wrench } from "lucide-react";
+import React, { useState } from "react";
+import { AlertTriangle, Ban, Check, ChevronRight, Clock, Loader2, Send, User, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
-import { readResultPresentation } from "./presentation";
+import { inlineInfoPrompt, readResultPresentation } from "./presentation";
 import ChatMarkdown from "./ChatMarkdown";
 import { journeyLink, metricLink, patientLink, usersLink } from "./navigation";
 
@@ -12,7 +12,7 @@ const ROLE_LABELS = {
   get_pending_tasks: "Open tasks",
   start_pathway: "Start a pathway",
   submit_event: "Record an update",
-  orchestrate_journey: "Re-evaluate journey",
+  orchestrate_journey: "Run journey orchestration",
   list_journeys: "Look up journeys",
   get_journey_steps: "Look up journey steps",
   list_patients: "Patients",
@@ -252,7 +252,8 @@ function prettyArgs(args = {}) {
  * One chat bubble. For assistant messages carrying a pending_action, renders
  * the inline Confirm/Reject card; once resolved, shows the outcome state.
  */
-export default function ChatMessageItem({ message, user, onNavigate, busy, onConfirm, onReject }) {
+export default function ChatMessageItem({ message, user, onNavigate, busy, onConfirm, onReject, onSubmitInfo, infoAnswered }) {
+  const [infoAnswer, setInfoAnswer] = useState("");
   const isUser = message.role === "user";
   const meta = message.meta || {};
   const pending = meta.pending_action;
@@ -271,8 +272,21 @@ export default function ChatMessageItem({ message, user, onNavigate, busy, onCon
   const showStructured = !pending && !actionResult && presentation.kind === "card";
   const showText = !pending && !actionResult && presentation.kind === "text";
   const denied = Boolean(meta.permission_denied);
-  const needsInfo = Boolean(meta.needs_info);
+  const needsInfo = inlineInfoPrompt(message);
   const bubbleClass = `chat-bubble chat-bubble--assistant${denied ? " chat-bubble--denied" : ""}${needsInfo ? " chat-bubble--ask" : ""}`;
+  const infoPlaceholder = needsInfo?.missing?.includes("journey_id")
+    ? "Patient name, pathway, or journey ID"
+    : needsInfo?.missing?.includes("patient_id")
+      ? "Patient name or patient reference"
+      : "Enter the requested information";
+
+  const submitInfo = (event) => {
+    event.preventDefault();
+    const answer = infoAnswer.trim();
+    if (!answer || busy) return;
+    setInfoAnswer("");
+    onSubmitInfo(answer);
+  };
 
   return (
     <div className="chat-row chat-row--assistant">
@@ -282,6 +296,21 @@ export default function ChatMessageItem({ message, user, onNavigate, busy, onCon
           {denied && <Ban size={12} className="chat-bubble-icon" aria-hidden />}
           <ChatMarkdown>{presentation.text}</ChatMarkdown>
         </div>}
+
+        {needsInfo && !infoAnswered && (
+          <form className="chat-needs-info-form" onSubmit={submitInfo}>
+            <input
+              value={infoAnswer}
+              onChange={(event) => setInfoAnswer(event.target.value)}
+              placeholder={infoPlaceholder}
+              aria-label="Answer the assistant's question"
+              disabled={busy}
+            />
+            <button type="submit" aria-label="Send answer" disabled={!infoAnswer.trim() || busy}>
+              {busy ? <Loader2 size={14} className="chat-spin" /> : <Send size={14} />}
+            </button>
+          </form>
+        )}
 
         {showStructured && <div className="chat-data-card">
           <div className="chat-data-label"><Wrench size={11} /> {humanizeTool(presentation.result.tool)}</div>

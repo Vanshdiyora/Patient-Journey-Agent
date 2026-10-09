@@ -24,7 +24,7 @@ from app.orchestration.journey_engine import JourneyEngine
 from app.orchestration.event_processor import EventProcessor
 from app.orchestration.langgraph_supervisor import OrchestrationFailure, SupervisorGraph
 from app.agents.supervisor.tools import build_supervisor_context
-from app.api.v1.journey_views import journeys_with_pathways, steps_with_pathway_details
+from app.services.journey_views import journeys_with_pathways, steps_with_pathway_details
 from app.rules.journey_rule_engine import JourneyRuleEngine
 from app.services.journey_service import sync_journey_to_active_pathway
 from app.services.step_evidence_storage import (

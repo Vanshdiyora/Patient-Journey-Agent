@@ -371,7 +371,7 @@ def describe_action(db: Session, user, name: str, args: dict[str, Any]) -> dict[
         elif name == "orchestrate_journey":
             patient, pathway = _journey_context(db, args)
             description.update({
-                "title": "Re-evaluate journey", "patient": patient,
+                "title": "Run journey orchestration", "patient": patient,
                 "changes": [
                     "Re-run the deterministic journey rules",
                     "Refresh step statuses, due dates and blockers",

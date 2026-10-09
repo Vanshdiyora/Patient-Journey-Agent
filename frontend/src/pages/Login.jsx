@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import Brand from "../../components/Brand";
-import { getErrorMessage } from "../../utils";
+import { useAuth } from "../context/AuthContext";
+import Brand from "../components/Brand";
+import { getErrorMessage } from "../utils";
 
 export default function Login() {
   const { login } = useAuth();

@@ -1,0 +1,16 @@
+"""Protocols implemented by external and local integration adapters."""
+
+from typing import Any, Protocol
+
+class SchedulingService(Protocol):
+    def request_appointment(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+    def reschedule_appointment(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+class CommunicationService(Protocol):
+    def send_reminder(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+class DocumentService(Protocol):
+    def request_document(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+class ClinicalEventService(Protocol):
+    def create_event(self, payload: dict[str, Any]) -> dict[str, Any]: ...

@@ -31,51 +31,29 @@ VITE_API_TIMEOUT_MS=300000
 
 `VITE_API_TIMEOUT_MS` is the Axios request timeout in milliseconds.
 
-## Modular architecture
+## Code layout
 
-```
+`src/main.jsx` mounts the app and imports `styles/index.css`. `src/App.jsx` owns
+providers; `src/routes/` owns path constants, access guards, and lazy page routes.
+
+```text
 frontend/src/
-├── main.jsx                 # ReactDOM bootstrap (BrowserRouter + App)
-├── App.jsx                  # Composition root: AuthProvider + AppRoutes
-├── routes/                  # Routing module
-│   ├── paths.js             #   Route path constants + buildPath()
-│   ├── guards.jsx           #   ProtectedRoute / StaffRoute / AdminRoute / HomeRoute
-│   └── index.jsx            #   Route tree (lazy-loaded pages)
-├── layouts/                 # App shell
-│   ├── AppLayout.jsx        #   Shell; picks portal theme class
-│   ├── portals.js           #   Per-role chrome config (nav, labels, themes)
-│   ├── Sidebar.jsx          #   Collapsible rail + identity card (role chip)
-│   └── Topbar.jsx           #   Breadcrumb + search + avatar
-├── pages/                   # One folder per feature
-│   └── <Feature>/
-│       ├── index.jsx        #   Page entry (routed)
-│       └── *.jsx|js         #   Private sub-components & config
-├── components/              # Shared UI primitives (Panel, TabBar, MetricCard…)
-├── context/AuthContext.jsx  # Session state (token + user, localStorage-backed)
-├── hooks/                   # useAsync, useTabs
-├── services/                # API layer: one module per backend resource
-│   ├── client.js            #   Single axios instance + interceptors
-│   ├── auth|patients|… .js  #   Resource clients
-│   └── index.js             #   Barrel — pages import from "../services"
-├── utils/                   # Pure helpers split by concern
-│   ├── dates.js text.js     #   Formatters
-│   ├── lists.js errors.js   #   Envelope normalizers, error extraction
-│   ├── roles.js             #   Role constants + capability flags
-│   └── index.js             #   Barrel
-└── styles/                  # Layered CSS (imported once via styles.css)
-    ├── index.css            #   Entrypoint — imports layers in cascade order
-    ├── tokens.css           #   Design tokens + element resets
-    ├── layout.css           #   Shell, sidebar, topbar
-    ├── ui.css               #   Shared primitives (buttons, panels, tables…)
-    ├── pages.css            #   Feature-page specifics
-    ├── portals.css          #   Portal accent variables
-    └── responsive.css       #   All media queries
+  components/       Small controls in ui.jsx; complex controls and chat/ separate
+  context/          Auth and toast state
+  hooks/            Reusable React hooks
+  layouts/          App shell and role-specific navigation
+  pages/            One-file routes at the top level; larger features in folders
+  routes/           Route tree, paths, and guards
+  services/         client.js transport, api.js resource clients, chat.js socket API
+  styles/           Ordered global CSS layers imported by index.css
+  utils/            Shared helpers in index.js and role rules in roles.js
 ```
 
-Conventions:
-- Pages import shared code through barrels (`../services`, `../utils`, `../components`).
-- A page's private sub-components live next to it and are never imported by other pages.
-- UI role gates are presentation-only; the backend authorizes every API.
+Keep a page in one file until it has reusable or independently complex parts.
+Put helpers used by several pages in `components/`, `hooks/`, or `utils/`.
+`services/index.js` is the public API for screens; `services/client.js` is the
+only Axios instance. API calls stay in `services/api.js`, except the chat socket
+in `services/chat.js`. Backend authorization remains authoritative.
 
 ## Pages
 
@@ -88,6 +66,13 @@ Conventions:
 - Action registry
 - Patient portal: My Journey with Overview / Care plan / Updates tabs
 - Login / protected routes
+
+The chat widget loads older messages as the conversation is scrolled upward
+and more conversations as History is scrolled downward. It fetches batches of
+10 through the existing chat API and preserves the visible message when older
+messages arrive. Missing patient or journey details can be entered inline in
+the chat, and journey orchestration changes require an in-chat Confirm or
+Reject action before they run.
 
 ## Backend contract
 

@@ -6,8 +6,9 @@ from app.core.authorization import require_staff, scope_patient_ids
 from app.models import Patient, Journey, Pathway, ExceptionRecord
 from app.schemas import PatientResponse, JourneyResponse
 from app.schemas.journey import JourneyCreate
-from app.api.v1.journey_views import journey_with_pathway, journeys_with_pathways
+from app.services.journey_views import journey_with_pathway, journeys_with_pathways
 from app.services.journey_service import start_journey_for_patient
+from app.services.patient_search import patient_search_condition
 
 router = APIRouter()
 
@@ -57,12 +58,7 @@ def list_patients(
         q = q.filter(Patient.id.in_(patient_ids))
     q = _apply_directory_filter(q, db, filter)
     if search:
-        term = f"%{search}%"
-        q = q.filter(
-            Patient.patient_reference.ilike(term)
-            | Patient.first_name.ilike(term)
-            | Patient.last_name.ilike(term)
-        )
+        q = q.filter(patient_search_condition(search))
     total = q.order_by(None).count()
     return {
         "items": q.order_by(Patient.created_at.desc(), Patient.id.desc()).offset(offset).limit(limit).all(),

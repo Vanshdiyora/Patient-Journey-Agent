@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Archive, Bot, ChevronLeft, Loader2, MessageCircle, Mic, MicOff, Plus,
   Send, X,
@@ -9,15 +9,22 @@ import { useConfirm } from "../ConfirmModal";
 import { useToast } from "../../context/ToastContext";
 import { getErrorMessage } from "../../utils";
 import ChatMessageItem from "./ChatMessageItem";
+import { inlineInfoPrompt } from "./presentation";
 
 const VOICE_LANG = "en-US";
+const HISTORY_BATCH_SIZE = 10;
+const SCROLL_THRESHOLD = 80;
 
-function mergeMessages(current, incoming) {
+function mergeById(current, incoming) {
   const rows = [...current];
-  for (const message of incoming.filter(Boolean)) {
-    const index = rows.findIndex(row => row.id === message.id);
-    if (index >= 0) rows[index] = message;
-    else rows.push(message);
+  const positions = new Map(rows.map((row, index) => [row.id, index]));
+  for (const item of incoming.filter(Boolean)) {
+    const index = positions.get(item.id);
+    if (index !== undefined) rows[index] = item;
+    else {
+      positions.set(item.id, rows.length);
+      rows.push(item);
+    }
   }
   return rows;
 }
@@ -100,6 +107,17 @@ export default function ChatWidget() {
   const toast = useToast();
 
   const scrollRef = useRef(null);
+  const historyScrollRef = useRef(null);
+  const sessionOffsetRef = useRef(0);
+  const sessionTotalRef = useRef(0);
+  const messageOffsetRef = useRef(0);
+  const messageTotalRef = useRef(0);
+  const sessionLoadingRef = useRef(false);
+  const messageLoadingRef = useRef(false);
+  const scrollAnchorRef = useRef(null);
+  const scrollToBottomRef = useRef(true);
+  const nearBottomRef = useRef(true);
+  const failedMessageModeRef = useRef("reset");
   const socketRef = useRef(null);
   const sendingRef = useRef(false);
   const recognitionRef = useRef(null);
@@ -111,40 +129,111 @@ export default function ChatWidget() {
 
   // ------------------------------------------------------------------ data
 
-  const loadSessions = useCallback((offset = 0) => {
+  const loadSessions = useCallback((reset = false) => {
+    if (!reset && (sessionLoadingRef.current || sessionOffsetRef.current >= sessionTotalRef.current)) return;
     const request = ++historyRequestRef.current;
-    setSessionOffset(offset);
+    const offset = reset ? 0 : sessionOffsetRef.current;
+    sessionLoadingRef.current = true;
+    if (reset) {
+      sessionOffsetRef.current = 0;
+      sessionTotalRef.current = 0;
+      setSessionOffset(0);
+      setSessionTotal(0);
+      setSessions([]);
+    }
     setLoadingSessions(true);
     setSessionsError("");
-    chatApi.listSessions({ limit: 10, offset })
-      .then(r => { if (request === historyRequestRef.current) { setSessions(r.items || []); setSessionTotal(r.total || 0); } })
+    chatApi.listSessions({ limit: HISTORY_BATCH_SIZE, offset })
+      .then(r => {
+        if (request !== historyRequestRef.current) return;
+        const items = r.items || [];
+        const total = r.total || 0;
+        const nextOffset = items.length ? offset + items.length : total;
+        sessionOffsetRef.current = nextOffset;
+        sessionTotalRef.current = total;
+        setSessionOffset(nextOffset);
+        setSessionTotal(total);
+        setSessions(current => reset ? items : mergeById(current, items));
+      })
       .catch(() => { if (request === historyRequestRef.current) setSessionsError("Could not load conversations."); })
-      .finally(() => { if (request === historyRequestRef.current) setLoadingSessions(false); });
+      .finally(() => {
+        if (request === historyRequestRef.current) {
+          sessionLoadingRef.current = false;
+          setLoadingSessions(false);
+        }
+      });
   }, []);
 
-  const loadMessages = useCallback((id, offset = 0) => {
+  const loadMessages = useCallback((id, mode = "reset") => {
     if (!id) return;
+    if (mode === "older" && (messageLoadingRef.current || messageOffsetRef.current >= messageTotalRef.current)) return;
     const request = ++messageRequestRef.current;
-    setMessageOffset(offset);
+    const offset = mode === "older" ? messageOffsetRef.current : 0;
+    messageLoadingRef.current = true;
+    if (mode === "reset") {
+      messageOffsetRef.current = 0;
+      messageTotalRef.current = 0;
+      scrollAnchorRef.current = null;
+      scrollToBottomRef.current = true;
+      nearBottomRef.current = true;
+      setMessageOffset(0);
+      setMessageTotal(0);
+      setMessages([]);
+    }
     setLoadingMessages(true);
     setHistoryLoadError("");
-    chatApi.messages(id, { limit: 10, offset })
+    chatApi.messages(id, { limit: HISTORY_BATCH_SIZE, offset })
       .then(r => {
         if (request === messageRequestRef.current && sessionRef.current === id) {
-          setMessages(r.items || []);
-          setMessageTotal(r.total || 0);
+          const items = r.items || [];
+          const total = r.total || 0;
+          let nextOffset;
+          if (mode === "older") {
+            const el = scrollRef.current;
+            if (el) scrollAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+            setMessages(current => mergeById(items, current));
+            nextOffset = items.length ? offset + items.length : total;
+          } else if (mode === "refresh") {
+            setMessages(current => mergeById(current, items));
+            nextOffset = messageOffsetRef.current === 0
+              ? items.length
+              : messageOffsetRef.current + Math.max(0, total - messageTotalRef.current);
+          } else {
+            setMessages(items);
+            nextOffset = items.length;
+          }
+          messageOffsetRef.current = nextOffset;
+          messageTotalRef.current = total;
+          setMessageOffset(nextOffset);
+          setMessageTotal(total);
         }
       })
-      .catch(() => { if (request === messageRequestRef.current && sessionRef.current === id) setHistoryLoadError("Could not load this conversation."); })
-      .finally(() => { if (request === messageRequestRef.current) setLoadingMessages(false); });
+      .catch(() => {
+        if (request === messageRequestRef.current && sessionRef.current === id) {
+          failedMessageModeRef.current = mode;
+          setHistoryLoadError("Could not load this conversation.");
+        }
+      })
+      .finally(() => {
+        if (request === messageRequestRef.current) {
+          messageLoadingRef.current = false;
+          setLoadingMessages(false);
+        }
+      });
   }, []);
 
   const startNewChat = useCallback(() => {
     if (sendingRef.current) return;
     messageRequestRef.current += 1;
+    messageLoadingRef.current = false;
     sessionRef.current = null;
     setSessionId(null);
     setMessages([]);
+    messageOffsetRef.current = 0;
+    messageTotalRef.current = 0;
+    scrollAnchorRef.current = null;
+    scrollToBottomRef.current = true;
+    nearBottomRef.current = true;
     setMessageOffset(0);
     setMessageTotal(0);
     setLoadingMessages(false);
@@ -157,22 +246,57 @@ export default function ChatWidget() {
     if (sendingRef.current) return;
     sessionRef.current = id;
     setSessionId(id);
-    setMessages([]);
-    setMessageOffset(0);
     setError("");
-    loadMessages(id);
+    loadMessages(id, "reset");
     setView("chat");
   }, [loadMessages]);
 
   useEffect(() => {
-    if (open) loadSessions(0);
+    if (open) loadSessions(true);
   }, [open, loadSessions]);
 
-  // Scroll to bottom on new messages/typing state.
+  // Keep the user's current message in view when older rows are prepended.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (scrollAnchorRef.current) {
+      const { height, top } = scrollAnchorRef.current;
+      el.scrollTop = top + el.scrollHeight - height;
+      scrollAnchorRef.current = null;
+      return;
+    }
+    if (scrollToBottomRef.current || nearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      scrollToBottomRef.current = false;
+    }
+  }, [messages, typing, open, view]);
+
+  useEffect(() => {
+    const el = historyScrollRef.current;
+    if (open && view === "history" && el && !loadingSessions && !sessionsError &&
+        sessionOffset > 0 && sessionOffset < sessionTotal && el.scrollHeight <= el.clientHeight + SCROLL_THRESHOLD) {
+      loadSessions();
+    }
+  }, [open, view, sessions, sessionOffset, sessionTotal, loadingSessions, sessionsError, loadSessions]);
+
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, typing, open]);
+    if (open && view === "chat" && el && !loadingMessages && !historyLoadError &&
+        messageOffset > 0 && messageOffset < messageTotal && el.scrollHeight <= el.clientHeight + SCROLL_THRESHOLD) {
+      loadMessages(sessionId, "older");
+    }
+  }, [open, view, messages, messageOffset, messageTotal, loadingMessages, historyLoadError, sessionId, loadMessages]);
+
+  const onHistoryScroll = (event) => {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_THRESHOLD) loadSessions();
+  };
+
+  const onMessagesScroll = (event) => {
+    const el = event.currentTarget;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_THRESHOLD;
+    if (el.scrollTop <= SCROLL_THRESHOLD) loadMessages(sessionRef.current, "older");
+  };
 
   // ------------------------------------------------------------ websocket
 
@@ -190,8 +314,10 @@ export default function ChatWidget() {
 
   const send = async (text) => {
     const content = (text ?? input).trim();
-    if (!content || sendingRef.current || loadingMessages || historyLoadError) return;
+    if (!content || sendingRef.current || (loadingMessages && messages.length === 0) || (historyLoadError && messages.length === 0)) return;
     sendingRef.current = true;
+    scrollToBottomRef.current = true;
+    nearBottomRef.current = true;
     setError("");
     setInput("");
     const localId = `local-${crypto.randomUUID()}`;
@@ -216,10 +342,10 @@ export default function ChatWidget() {
         if (sessionRef.current === sid) setTyping(true);
       });
       if (sessionRef.current === sid) {
-        setMessages(prev => mergeMessages(prev.filter(m => m.id !== localId), [result.user_message, result.assistant_message]));
-        loadMessages(sid, 0);
+        setMessages(prev => mergeById(prev.filter(m => m.id !== localId), [result.user_message, result.assistant_message]));
+        loadMessages(sid, "refresh");
       }
-      loadSessions(0);
+      loadSessions(true);
     } catch (err) {
       setError(getErrorMessage(err));
       setMessages(prev => prev.filter(m => m.id !== localId));
@@ -237,14 +363,16 @@ export default function ChatWidget() {
     if (!sessionRef.current || !messageId || sendingRef.current) return;
     const sid = sessionRef.current;
     sendingRef.current = true;
+    scrollToBottomRef.current = true;
+    nearBottomRef.current = true;
     setSending(true);
     setTyping(true);
     try {
       const socket = await ensureSocket();
       const result = await socketRequest(socket, { type: action, session_id: sid, message_id: messageId });
       if (sessionRef.current === sid) {
-        setMessages(prev => mergeMessages(prev.map(m => m.id === messageId ? result.message : m), [result.result_message]));
-        loadMessages(sid, 0);
+        setMessages(prev => mergeById(prev.map(m => m.id === messageId ? result.message : m), [result.result_message]));
+        loadMessages(sid, "refresh");
       }
     } catch (err) {
       setError(getErrorMessage(err));
@@ -314,10 +442,12 @@ export default function ChatWidget() {
       await chatApi.archiveSession(id);
       toast.success("Conversation deleted.");
       setSessions(prev => prev.filter(s => s.id !== id));
-      setSessionTotal(prev => Math.max(0, prev - 1));
-      if (sessions.length === 1 && sessionOffset > 0) loadSessions(sessionOffset - 10);
+      sessionTotalRef.current = Math.max(0, sessionTotalRef.current - 1);
+      sessionOffsetRef.current = Math.max(0, sessionOffsetRef.current - 1);
+      setSessionTotal(sessionTotalRef.current);
+      setSessionOffset(sessionOffsetRef.current);
       if (id === sessionId) startNewChat();
-      if (view === "history" && !sessions.length) setView("chat");
+      if (view === "history" && sessions.length === 1 && sessionTotalRef.current === 0) setView("chat");
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
@@ -343,14 +473,14 @@ export default function ChatWidget() {
       {/* Floating launcher */}
       <div className="chat-launcher-wrap">
         {launcherGreeting && !open && (
-          <div className="chat-launcher-bubble" onClick={() => { dismissGreeting(); setOpen(true); }}>
+          <div className="chat-launcher-bubble" onClick={() => { dismissGreeting(); scrollToBottomRef.current = true; nearBottomRef.current = true; setOpen(true); }}>
             {greetingText}
             <button className="chat-launcher-bubble-close" onClick={(e) => { e.stopPropagation(); dismissGreeting(); }} aria-label="Dismiss">×</button>
           </div>
         )}
         <button
           className={`chat-launcher ${open ? "chat-launcher--active" : ""}`}
-          onClick={() => { if (!open) { setOpen(true); dismissGreeting(); } else setOpen(false); }}
+          onClick={() => { if (!open) { scrollToBottomRef.current = true; nearBottomRef.current = true; setOpen(true); dismissGreeting(); } else setOpen(false); }}
           aria-label={open ? "Close assistant" : "Open assistant"}
         >
           {open ? <X size={22} /> : <MessageCircle size={22} />}
@@ -364,7 +494,7 @@ export default function ChatWidget() {
           <div className="chat-header">
             {view === "history" ? (
               <>
-                <button className="chat-icon-btn" onClick={() => setView("chat")} aria-label="Back to chat">
+                <button className="chat-icon-btn" onClick={() => { scrollToBottomRef.current = true; nearBottomRef.current = true; setView("chat"); }} aria-label="Back to chat">
                   <ChevronLeft size={17} />
                 </button>
                 <div className="chat-header-title"><strong>History</strong><span>Your conversations</span></div>
@@ -377,16 +507,14 @@ export default function ChatWidget() {
                   <span>{typing ? "typing…" : isPatient ? "Patient portal" : "Staff portal"}</span>
                 </div>
                 <button className="chat-icon-btn" disabled={sending} onClick={startNewChat} aria-label="New conversation" title="New conversation"><Plus size={17} /></button>
-                <button className="chat-icon-btn" disabled={sending} onClick={() => { loadSessions(0); setView("history"); }} aria-label="History" title="History"><Archive size={17} /></button>
+                <button className="chat-icon-btn" disabled={sending} onClick={() => { loadSessions(true); setView("history"); }} aria-label="History" title="History"><Archive size={17} /></button>
               </>
             )}
             <button className="chat-icon-btn" onClick={() => setOpen(false)} aria-label="Close assistant"><X size={17} /></button>
           </div>
 
           {view === "history" ? (
-            <div className="chat-history-list">
-              {loadingSessions && <div className="chat-loading" role="status"><Loader2 size={17} className="chat-spin" /> Loading conversations…</div>}
-              {!loadingSessions && sessionsError && <div className="chat-load-error" role="alert">{sessionsError}<button type="button" onClick={() => loadSessions(sessionOffset)}>Retry</button></div>}
+            <div className="chat-history-list" ref={historyScrollRef} onScroll={onHistoryScroll}>
               {!loadingSessions && !sessionsError && sessions.length === 0 && <div className="chat-empty">No conversations yet.</div>}
               {sessions.map(s => (
                 <div key={s.id} className={`chat-history-item ${s.id === sessionId ? "chat-history-item--active" : ""}`}>
@@ -397,22 +525,15 @@ export default function ChatWidget() {
                   <button className="chat-icon-btn chat-history-archive" onClick={() => archive(s.id)} aria-label="Archive conversation"><Archive size={14} /></button>
                 </div>
               ))}
-              {!loadingSessions && !sessionsError && <div className="chat-history-pagination">
-                <button type="button" disabled={sessionOffset === 0} onClick={() => loadSessions(Math.max(0, sessionOffset - 10))}>Newer</button>
-                <span>Page {Math.floor(sessionOffset / 10) + 1} of {Math.max(1, Math.ceil(sessionTotal / 10))}</span>
-                <button type="button" disabled={sessionOffset + sessions.length >= sessionTotal} onClick={() => loadSessions(sessionOffset + 10)}>Older</button>
-              </div>}
+              {loadingSessions && <div className="chat-loading chat-loading--more" role="status"><Loader2 size={17} className="chat-spin" /> Loading conversations…</div>}
+              {sessionsError && <div className="chat-load-error chat-load-error--more" role="alert">{sessionsError}<button type="button" onClick={() => loadSessions(sessionOffset === 0)}>Retry</button></div>}
             </div>
           ) : (
             <>
-              <div className="chat-messages" ref={scrollRef}>
-                {sessionId && !loadingMessages && !historyLoadError && <div className="chat-history-pagination">
-                  <button type="button" disabled={messageOffset + 10 >= messageTotal} onClick={() => loadMessages(sessionId, messageOffset + 10)}>Older</button>
-                  <span>Page {Math.floor(messageOffset / 10) + 1} of {Math.max(1, Math.ceil(messageTotal / 10))}</span>
-                  <button type="button" disabled={messageOffset === 0} onClick={() => loadMessages(sessionId, Math.max(0, messageOffset - 10))}>Newer</button>
-                </div>}
-                {loadingMessages && <div className="chat-loading chat-loading--messages" role="status"><Loader2 size={19} className="chat-spin" /> Loading conversation…</div>}
-                {!loadingMessages && historyLoadError && <div className="chat-load-error" role="alert">{historyLoadError}<button type="button" onClick={() => loadMessages(sessionId, messageOffset)}>Retry</button></div>}
+              <div className="chat-messages" ref={scrollRef} onScroll={onMessagesScroll}>
+                {loadingMessages && messageOffset > 0 && <div className="chat-loading chat-loading--more" role="status"><Loader2 size={17} className="chat-spin" /> Loading older messages…</div>}
+                {loadingMessages && messageOffset === 0 && <div className="chat-loading chat-loading--messages" role="status"><Loader2 size={19} className="chat-spin" /> Loading conversation…</div>}
+                {historyLoadError && <div className={`chat-load-error ${messages.length ? "chat-load-error--more" : ""}`} role="alert">{historyLoadError}<button type="button" onClick={() => loadMessages(sessionId, failedMessageModeRef.current)}>Retry</button></div>}
                 {!loadingMessages && !historyLoadError && messages.length === 0 && (
                   <div className="chat-empty">
                     <Bot size={26} />
@@ -429,7 +550,7 @@ export default function ChatWidget() {
                     {error && <div className="chat-error">{error}</div>}
                   </div>
                 )}
-                {!loadingMessages && messages.slice(-10).map(m => (
+                {messages.map((m, index) => (
                   <ChatMessageItem
                     key={m.id}
                     message={m}
@@ -438,9 +559,11 @@ export default function ChatWidget() {
                     busy={sending}
                     onConfirm={() => resolveAction(m.id, "confirm")}
                     onReject={() => resolveAction(m.id, "reject")}
+                    onSubmitInfo={send}
+                    infoAnswered={Boolean(inlineInfoPrompt(m)) && messages.slice(index + 1).some(row => row.role === "user")}
                   />
                 ))}
-                {!loadingMessages && typing && (
+                {typing && (
                   <div className="chat-row chat-row--assistant">
  <div className="chat-avatar"><Bot size={13} /></div>
                     <div className="chat-bubble chat-bubble--assistant chat-bubble--typing"><i /><i /><i /></div>
@@ -461,7 +584,7 @@ export default function ChatWidget() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={listening ? "Listening… speak now" : "Type your message…"}
-                  disabled={sending || loadingMessages || Boolean(historyLoadError)}
+                  disabled={sending || (loadingMessages && messages.length === 0) || (Boolean(historyLoadError) && messages.length === 0)}
                   aria-label="Message"
                 />
                 <button className="chat-send" disabled={!input.trim() || sending || loadingMessages || Boolean(historyLoadError)} aria-label="Send message">

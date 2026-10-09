@@ -1,7 +1,7 @@
 import React from "react";
 import { AlertTriangle, ArrowRight, Bot, Cog, Info, ShieldAlert, Sparkles } from "lucide-react";
 import { humanize } from "../utils";
-import Badge from "./Badge";
+import { Badge } from "./ui";
 
 const componentName = value => humanize(String(value || "").replace(/([a-z])([A-Z])/g, "$1 $2"));
 
