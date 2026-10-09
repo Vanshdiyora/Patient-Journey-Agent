@@ -17,7 +17,6 @@ const Journeys = lazy(() => import("../pages/Journeys"));
 const JourneyDetail = lazy(() => import("../pages/JourneyDetail"));
 const Exceptions = lazy(() => import("../pages/Exceptions"));
 const AgentRuns = lazy(() => import("../pages/AgentRuns"));
-const ActionRegistry = lazy(() => import("../pages/ActionRegistry"));
 const UserManagement = lazy(() => import("../pages/UserManagement"));
 const Pathways = lazy(() => import("../pages/Pathways"));
 const MyJourney = lazy(() => import("../pages/MyJourney"));
@@ -48,7 +47,6 @@ export default function AppRoutes() {
               <Route path={PATHS.journeyDetail} element={<JourneyDetail />} />
               <Route path={PATHS.exceptions} element={<Exceptions />} />
               <Route path={PATHS.agentRuns} element={<AgentRuns />} />
-              <Route path={PATHS.actions} element={<ActionRegistry />} />
               <Route element={<AdminRoute />}>
                 <Route path={PATHS.pathways} element={<Pathways />} />
                 <Route path={PATHS.users} element={<UserManagement />} />

@@ -3,5 +3,5 @@ export { default as api } from "./client";
 export { chatApi } from "./chat";
 export {
   authApi, dashboardApi, healthApi, patientsApi, journeysApi,
-  exceptionsApi, agentsApi, actionsApi, adminApi, meApi, pathwaysApi,
+  exceptionsApi, agentsApi, adminApi, meApi, pathwaysApi,
 } from "./api";

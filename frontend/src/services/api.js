@@ -83,11 +83,6 @@ export const agentsApi = {
   runs: (params) => get("/api/v1/agent-runs", params),
 };
 
-/** Action registry catalog (staff only). */
-export const actionsApi = {
-  registry: () => get("/api/v1/actions/registry"),
-};
-
 /**
  * Admin-only user management. The backend enforces require_admin; this module
  * exists so UserManagement has a dedicated, auditable client.

@@ -63,7 +63,6 @@ in `services/chat.js`. Backend authorization remains authoritative.
 - Journey steps / orchestration context / events / agent activity
 - Exceptions with resolve action
 - Agent run audit view
-- Action registry
 - Patient portal: My Journey with Overview / Care plan / Updates tabs
 - Login / protected routes
 

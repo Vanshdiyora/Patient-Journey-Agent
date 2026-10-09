@@ -13,7 +13,6 @@ export const PATHS = {
   journeyDetail: "/journeys/:journeyId",
   exceptions: "/exceptions",
   agentRuns: "/agent-runs",
-  actions: "/actions",
   users: "/users",
   pathways: "/pathways/manage",
 };

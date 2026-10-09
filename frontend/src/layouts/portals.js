@@ -1,5 +1,5 @@
 import {
-  Activity, AlertTriangle, Bot, HeartPulse, LayoutDashboard, Network,
+  AlertTriangle, Bot, HeartPulse, LayoutDashboard, Network,
   ListChecks, UserCog, Users,
 } from "lucide-react";
 import { ROLES, roleOf } from "../utils/roles";
@@ -23,7 +23,6 @@ export const PORTALS = {
       { to: PATHS.journeys, label: "Patient journeys", icon: Network },
       { to: PATHS.exceptions, label: "Exceptions", icon: AlertTriangle },
       { to: PATHS.agentRuns, label: "Agent activity", icon: Bot },
-      { to: PATHS.actions, label: "Action registry", icon: Activity },
       { to: PATHS.pathways, label: "Care pathways", icon: ListChecks, adminOnly: true },
       { to: PATHS.users, label: "User management", icon: UserCog, adminOnly: true },
     ],
@@ -50,7 +49,6 @@ export const PORTALS = {
       { to: PATHS.patients, label: "Patients", icon: Users },
       { to: PATHS.journeys, label: "Journeys", icon: Network },
       { to: PATHS.exceptions, label: "Follow-up queue", icon: AlertTriangle },
-      { to: PATHS.actions, label: "Task history", icon: Activity },
     ],
   },
   [ROLES.PATIENT]: {
