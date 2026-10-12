@@ -7,13 +7,6 @@ import Brand from "../components/Brand";
 import { getErrorMessage } from "../utils";
 import { ROLES } from "../utils/roles";
 
-const ROLE_OPTIONS = [
-  { value: ROLES.PATIENT, label: "Patient" },
-  { value: ROLES.CLINICIAN, label: "Clinician" },
-  { value: ROLES.CARE_COORDINATOR, label: "Care Coordinator" },
-  { value: ROLES.ADMIN, label: "Administrator" },
-];
-
 const GENDER_OPTIONS = ["Female", "Male", "Non-binary", "Prefer not to say"];
 
 export default function Signup() {
@@ -22,7 +15,6 @@ export default function Signup() {
     firstName: "",
     lastName: "",
     email: "",
-    role: ROLES.PATIENT,
     dob: "",
     gender: GENDER_OPTIONS[0],
     password: "",
@@ -49,7 +41,7 @@ export default function Signup() {
       setError("Passwords do not match.");
       return;
     }
-    if (form.role === ROLES.PATIENT && !form.dob) {
+    if (!form.dob) {
       setError("Date of birth is required for patient accounts.");
       return;
     }
@@ -61,10 +53,10 @@ export default function Signup() {
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         email: form.email.trim(),
-        role: form.role,
+        role: ROLES.PATIENT,
         password: form.password,
-        date_of_birth: form.role === ROLES.PATIENT ? form.dob : undefined,
-        gender: form.role === ROLES.PATIENT ? form.gender : undefined,
+        date_of_birth: form.dob,
+        gender: form.gender,
       });
       await login({ email: form.email.trim(), password: form.password });
     } catch (err) {
@@ -74,7 +66,6 @@ export default function Signup() {
     }
   };
 
-  const isPatient = form.role === ROLES.PATIENT;
 
   return (
     <div className="login-page">
@@ -116,17 +107,7 @@ export default function Signup() {
             <label>Email address
               <div className="input-wrap"><Mail size={18} /><input type="email" value={form.email} onChange={set("email")} placeholder="name@example.test" autoComplete="email" /></div>
             </label>
-            <label>I am a
-              <div className="input-wrap">
-                <ShieldCheck size={18} />
-                <select className="signup-role-select" value={form.role} onChange={set("role")}>
-                  {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-                <ChevronDown size={16} className="input-action" />
-              </div>
-            </label>
-            {isPatient && (
-              <div className="form-row">
+            <div className="form-row">
                 <label>Date of birth
                   <div className="input-wrap"><Calendar size={18} /><input type="date" value={form.dob} onChange={set("dob")} max={new Date().toISOString().slice(0, 10)} /></div>
                 </label>
@@ -139,8 +120,7 @@ export default function Signup() {
                     <ChevronDown size={16} className="input-action" />
                   </div>
                 </label>
-              </div>
-            )}
+            </div>
             <label>Password
               <div className="input-wrap"><LockKeyhole size={18} />
                 <input type={showPassword ? "text" : "password"} value={form.password} onChange={set("password")} placeholder="At least 8 characters" autoComplete="new-password" />

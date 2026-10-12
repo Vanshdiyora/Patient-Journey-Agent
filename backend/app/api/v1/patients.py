@@ -72,23 +72,22 @@ def list_patients(
 
 @router.get("/patients/{patient_id}", response_model=PatientResponse)
 def get_patient(patient_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
-    item = db.query(Patient).filter(Patient.id == patient_id).first()
-    if not item:
-        raise HTTPException(404, "Patient not found")
-    # A patient record is readable if any of its journeys would be — approximate
-    # scope check via patient id scope, since Patient has no journey link here.
+    q = db.query(Patient).filter(Patient.id == patient_id)
     patient_ids = scope_patient_ids(db, user)
-    if patient_ids is not None and item.id not in patient_ids:
+    if patient_ids is not None:
+        q = q.filter(Patient.id.in_(patient_ids))
+    item = q.first()
+    if not item:
         raise HTTPException(404, "Patient not found")
     return item
 
 
 @router.get("/patients/{patient_id}/journeys")
 def patient_journeys(patient_id: UUID, limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user=Depends(require_staff)):
-    if not db.query(Patient).filter(Patient.id == patient_id).first():
-        raise HTTPException(404, "Patient not found")
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None and patient_id not in patient_ids:
+        raise HTTPException(404, "Patient not found")
+    if not db.query(Patient).filter(Patient.id == patient_id).first():
         raise HTTPException(404, "Patient not found")
     q = db.query(Journey).filter(Journey.patient_id == patient_id)
     journeys = q.order_by(Journey.started_at.desc(), Journey.id.desc()).offset(offset).limit(limit).all()

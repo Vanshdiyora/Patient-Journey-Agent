@@ -17,12 +17,12 @@ SELECT md5('demo-chat-answer:' || id)::uuid, id, 'assistant',
 FROM chat_sessions;
 
 INSERT INTO chat_audit_log (
-    id, user_id, conversation_id, message_id, tool_name, event,
-    parameters, permission_result, detail, created_at
+    id, user_id, role_at_time, patient_id, conversation_id, message_id, tool_name, event,
+    parameters, permission_result, result_status, detail, created_at
 )
-SELECT md5('demo-chat-audit:' || id)::uuid, user_id, id,
-       md5('demo-chat-answer:' || id)::uuid, 'seed_database', 'demo_seeded',
-       '{"synthetic_demo":true}'::jsonb, 'not_applicable',
+SELECT md5('demo-chat-audit:' || s.id)::uuid, s.user_id, u.role, u.patient_id, s.id,
+       md5('demo-chat-answer:' || s.id)::uuid, 'seed_database', 'demo_seeded',
+       '{"synthetic_demo":true}'::jsonb, 'not_applicable', 'demo',
        'Synthetic history created by the seed; no tool or clinical action executed.',
-       created_at + interval '1 second'
-FROM chat_sessions;
+       s.created_at + interval '1 second'
+FROM chat_sessions s JOIN users u ON u.id = s.user_id;

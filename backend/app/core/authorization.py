@@ -2,9 +2,7 @@
 Role-based access control service.
 
 Centralizes every authorization decision:
-- STAFF_ROLES see data according to assignment scope (patient-level assignment
-  via users.patient_id; no assignment table exists yet, so staff scope is
-  "all records" — see scope_patient_ids / scope_note).
+- Clinical and coordination staff see only explicitly assigned patients.
 - PATIENT role users are bound to exactly one patient via users.patient_id and
   may only ever touch their own records.
 - Identity, role and patient link ALWAYS come from the authenticated DB user,
@@ -22,6 +20,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.journey import Journey
+from app.models.staff_patient_assignment import StaffPatientAssignment
 
 STAFF_ROLES = ("ADMIN", "CLINICIAN", "CARE_COORDINATOR")
 READ_ALL_ROLES = ("ADMIN",)
@@ -54,28 +53,31 @@ def _deny_read() -> HTTPException:
     return HTTPException(404, "Resource not found")
 
 
-def can_read_journey(user: User, journey: Journey) -> bool:
+def can_read_journey(db: Session, user: User, journey: Journey) -> bool:
     if user.role == "ADMIN":
         return True
     if user.role == "PATIENT":
         return journey.patient_id == user.patient_id
-    # Staff: assignment data is not modeled yet, so staff scope is global.
-    return user.role in STAFF_ROLES
+    if user.role in ("CLINICIAN", "CARE_COORDINATOR"):
+        return db.query(StaffPatientAssignment.id).filter(
+            StaffPatientAssignment.staff_user_id == user.id,
+            StaffPatientAssignment.patient_id == journey.patient_id,
+        ).first() is not None
+    return False
 
 
 def scope_patient_ids(db: Session, user: User) -> list[UUID] | None:
     """
-    Patient IDs the user may see, or None for "unrestricted" (admin, and staff
-    while no finer assignment model exists).
+    Patient IDs the user may see, or None for unrestricted administrators.
     """
     if user.role == "ADMIN":
         return None
     if user.role == "PATIENT":
         return [user.patient_id] if user.patient_id else []
-    if user.role in STAFF_ROLES:
-        # TODO(assignment model): constrain to the user's team/clinic once
-        # assignments exist. Until then staff scope is unrestricted.
-        return None
+    if user.role in ("CLINICIAN", "CARE_COORDINATOR"):
+        return [row[0] for row in db.query(StaffPatientAssignment.patient_id).filter(
+            StaffPatientAssignment.staff_user_id == user.id
+        ).all()]
     return []
 
 
@@ -84,13 +86,17 @@ def scope_note(user: User) -> str:
         return "all"
     if user.role == "PATIENT":
         return "own"
-    return "assigned (global while assignments are not modeled)"
+    return "assigned patients" if user.role in STAFF_ROLES else "none"
 
 
 def get_journey_scoped(journey_id: UUID, db: Session, user: User) -> Journey:
     """Fetch a journey the user may READ; 404 otherwise. For reads."""
-    journey = db.query(Journey).filter(Journey.id == journey_id).first()
-    if not journey or not can_read_journey(user, journey):
+    q = db.query(Journey).filter(Journey.id == journey_id)
+    patient_ids = scope_patient_ids(db, user)
+    if patient_ids is not None:
+        q = q.filter(Journey.patient_id.in_(patient_ids))
+    journey = q.first()
+    if not journey or not can_read_journey(db, user, journey):
         raise _deny_read()
     return journey
 
@@ -109,8 +115,12 @@ def get_journey_for_action(
     """
     if user.role not in allowed_roles:
         raise HTTPException(403, "Your role cannot perform this action")
-    journey = db.query(Journey).filter(Journey.id == journey_id).first()
-    if not journey or not can_read_journey(user, journey):
+    q = db.query(Journey).filter(Journey.id == journey_id)
+    patient_ids = scope_patient_ids(db, user)
+    if patient_ids is not None:
+        q = q.filter(Journey.patient_id.in_(patient_ids))
+    journey = q.first()
+    if not journey or not can_read_journey(db, user, journey):
         raise _deny_read()
     return journey
 

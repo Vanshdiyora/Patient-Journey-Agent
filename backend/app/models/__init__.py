@@ -10,10 +10,11 @@ from .exception_model import ExceptionRecord
 from .agent_run import AgentRun
 from .chat import ChatSession, ChatMessage
 from .chat_audit import ChatAuditLog
+from .staff_patient_assignment import StaffPatientAssignment
 
 __all__ = [
     "User", "Patient", "Pathway", "PathwayStep", "Dependency",
     "Journey", "JourneyStep", "PatientEvent", "ActionExecution",
     "PathwayActionRule", "ExceptionRecord", "AgentRun",
-    "ChatSession", "ChatMessage", "ChatAuditLog"
+    "ChatSession", "ChatMessage", "ChatAuditLog", "StaffPatientAssignment"
 ]

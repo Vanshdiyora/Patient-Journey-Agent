@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ShieldCheck, UserCog } from "lucide-react";
-import { adminApi } from "../services";
+import { adminApi, patientsApi } from "../services";
 import { useAsync } from "../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../utils";
 import { useConfirm } from "../components/ConfirmModal";
@@ -14,6 +14,18 @@ export default function UserManagement() {
   const { data, loading, error } = useAsync(() => adminApi.users({ limit: 10, offset }), [refreshKey, offset]);
   const users = toList(data, "items", "users");
   const [saving, setSaving] = useState("");
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [patientSearch, setPatientSearch] = useState("");
+  const [staffForm, setStaffForm] = useState({ email: "", display_name: "", password: "", role: ROLES.CLINICIAN });
+  const [assignmentRefresh, setAssignmentRefresh] = useState(0);
+  const { data: assignments, loading: assignmentsLoading } = useAsync(
+    () => selectedStaff ? adminApi.patientAssignments(selectedStaff.id) : Promise.resolve({ patient_ids: [] }),
+    [selectedStaff?.id, assignmentRefresh],
+  );
+  const { data: matchingPatients } = useAsync(
+    () => patientSearch.trim() ? patientsApi.list({ search: patientSearch.trim(), limit: 10 }) : Promise.resolve({ items: [] }),
+    [patientSearch],
+  );
   const [feedback, setFeedback] = useState(null);
   const [confirm, confirmModal] = useConfirm();
   const toast = useToast();
@@ -65,6 +77,46 @@ export default function UserManagement() {
     } setSaving("");
   };
 
+  const createStaff = async (event) => {
+    event.preventDefault();
+    setSaving("create");
+    try {
+      await adminApi.createStaff(staffForm);
+      setStaffForm({ email: "", display_name: "", password: "", role: ROLES.CLINICIAN });
+      setRefreshKey(k => k + 1);
+      toast.success("Staff account created.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSaving("");
+    }
+  };
+
+  const changeAssignment = async (patientId, assign) => {
+    const staff = selectedStaff;
+    if (!staff) return;
+    if (!assign) {
+      const ok = await confirm({
+        title: "Remove patient access?",
+        message: `${staff.display_name || staff.email} will immediately lose access to this patient and their journeys.`,
+        confirmLabel: "Remove access",
+        intent: "danger",
+      });
+      if (!ok) return;
+    }
+    setSaving(patientId);
+    try {
+      if (assign) await adminApi.assignPatient(staff.id, patientId);
+      else await adminApi.unassignPatient(staff.id, patientId);
+      setAssignmentRefresh(k => k + 1);
+      toast.success(assign ? "Patient access granted." : "Patient access removed.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSaving("");
+    }
+  };
+
   return <div>
     <PageHeading
       eyebrow="Administration"
@@ -87,14 +139,17 @@ export default function UserManagement() {
                   <td>
                     <Select
                       value={u.role}
-                      disabled={saving === u.id}
+                      disabled={saving === u.id || u.role === ROLES.PATIENT}
                       onChange={v => setRole(u, v)}
-                      options={Object.values(ROLES).map(r => ({ value: r, label: humanize(r) }))}
+                      options={(u.role === ROLES.PATIENT ? [ROLES.PATIENT] : [ROLES.ADMIN, ROLES.CLINICIAN, ROLES.CARE_COORDINATOR]).map(r => ({ value: r, label: humanize(r) }))}
                       className="role-select"
                     />
                   </td>
                   <td><Badge kind="status" value={u.is_active ? "active" : "cancelled"} fallback={u.is_active ? "Active" : "Inactive"} /></td>
                   <td>
+                    {(u.role === ROLES.CLINICIAN || u.role === ROLES.CARE_COORDINATOR) && (
+                      <button className="secondary-btn" onClick={() => setSelectedStaff(u)}>Patient access</button>
+                    )}
                     <button className="secondary-btn" disabled={saving === u.id} onClick={() => toggleActive(u)}>
                       {u.is_active ? "Deactivate" : "Reactivate"}
                     </button>
@@ -105,6 +160,33 @@ export default function UserManagement() {
           ) : <EmptyState icon={ShieldCheck} title="No users" text="No identities are registered yet." />}
       {!loading && !error && <Pagination offset={offset} count={users.length} total={data?.total ?? 0} onPage={setOffset} />}
     </Panel>
+    <Panel title="Create staff account" subtitle="Only administrators can provision staff identities.">
+      <form onSubmit={createStaff} className="form-stack" style={{ padding: 18 }}>
+        <label>Name<input required maxLength={200} value={staffForm.display_name} onChange={e => setStaffForm(f => ({ ...f, display_name: e.target.value }))} /></label>
+        <label>Email<input required type="email" value={staffForm.email} onChange={e => setStaffForm(f => ({ ...f, email: e.target.value }))} /></label>
+        <label>Initial password<input required type="password" minLength={8} maxLength={128} value={staffForm.password} onChange={e => setStaffForm(f => ({ ...f, password: e.target.value }))} /></label>
+        <label>Role<Select value={staffForm.role} onChange={role => setStaffForm(f => ({ ...f, role }))}
+          options={[ROLES.CLINICIAN, ROLES.CARE_COORDINATOR, ROLES.ADMIN].map(role => ({ value: role, label: humanize(role) }))} /></label>
+        <button className="primary-btn" type="submit" disabled={saving === "create"}>Create account</button>
+      </form>
+    </Panel>
+    {selectedStaff && <Panel title={`Patient access: ${selectedStaff.display_name || selectedStaff.email}`} subtitle="Clinical and coordination staff can see only assigned patients.">
+      <div style={{ padding: 18 }}>
+        <button className="secondary-btn" onClick={() => setSelectedStaff(null)}>Close</button>
+        <p>Assigned patients</p>
+        {assignmentsLoading ? <SkeletonRows /> : (assignments?.patients || []).length ? (
+          <ul>{assignments.patients.map(patient => <li key={patient.id}>{patient.name} ({patient.reference}) <button className="secondary-btn" disabled={saving === patient.id} onClick={() => changeAssignment(patient.id, false)}>Remove access</button></li>)}</ul>
+        ) : <p>No patients assigned.</p>}
+        <label>Find a patient to assign<input value={patientSearch} onChange={e => setPatientSearch(e.target.value)} placeholder="Search name or reference" /></label>
+        {patientSearch.trim() && <ul>{toList(matchingPatients, "items", "patients").map(patient => (
+          <li key={patient.id}>{patient.first_name} {patient.last_name} ({patient.patient_reference}){" "}
+            <button className="secondary-btn" disabled={saving === patient.id || (assignments?.patient_ids || []).includes(patient.id)} onClick={() => changeAssignment(patient.id, true)}>
+              {(assignments?.patient_ids || []).includes(patient.id) ? "Assigned" : "Grant access"}
+            </button>
+          </li>
+        ))}</ul>}
+      </div>
+    </Panel>}
     {confirmModal}
   </div>;
 }

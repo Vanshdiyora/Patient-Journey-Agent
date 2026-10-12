@@ -323,15 +323,22 @@ export default function ChatMessageItem({ message, user, onNavigate, busy, onCon
               <Wrench size={14} />
               <strong>{description?.title || humanizeTool(pending.name)}</strong>
               {pending.status === "pending" && <span className="chat-action-badge">Awaiting confirmation</span>}
+              {pending.status === "processing" && <span className="chat-action-badge">Processing</span>}
               {pending.status === "executed" && <span className="chat-action-badge chat-action-badge--done"><Check size={11} /> Done</span>}
               {pending.status === "failed" && <span className="chat-action-badge chat-action-badge--fail"><AlertTriangle size={11} /> Failed</span>}
               {pending.status === "rejected" && <span className="chat-action-badge chat-action-badge--muted"><Ban size={11} /> Rejected</span>}
               {pending.status === "expired" && <span className="chat-action-badge chat-action-badge--muted"><Clock size={11} /> Expired</span>}
             </div>
             {description?.patient && (
-              <div className="chat-action-args">Patient: {description.patient}</div>
+              <div className="chat-action-args">Patient: {description.patient}{description.patient_reference ? ` (${description.patient_reference})` : ""}</div>
             )}
-            {!description?.patient && prettyArgs(pending.arguments) && (
+            {!description?.patient && description?.patient_reference && (
+              <div className="chat-action-args">Patient reference: {description.patient_reference}</div>
+            )}
+            {Object.keys(pending.arguments || {}).length > 0 && (
+              <div className="chat-action-args">Exact parameters: <code>{JSON.stringify(pending.arguments)}</code></div>
+            )}
+            {!description?.patient && !description?.patient_reference && prettyArgs(pending.arguments) && (
               <div className="chat-action-args">{prettyArgs(pending.arguments)}</div>
             )}
             {description?.changes?.length > 0 && pending.status === "pending" && (

@@ -111,14 +111,15 @@ async def chat_socket(websocket: WebSocket):
                 )
                 await websocket.send_json({"type": "action", "request_id": request_id, **result})
             except Exception as exc:
-                detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+                detail = exc.detail if isinstance(exc, HTTPException) else "Action could not be completed"
                 await websocket.send_json({"type": "error", "request_id": request_id, "detail": detail})
             continue
         if kind != "message":
             await websocket.send_json({"type": "error", "request_id": request_id, "detail": f"Unknown type: {kind}"})
             continue
 
-        content = str(payload.get("content") or "").strip()
+        raw_content = payload.get("content")
+        content = raw_content.strip() if isinstance(raw_content, str) else ""
         raw_session = payload.get("session_id")
         if not content or len(content) > 4000:
             detail = "Message content is required" if not content else "Message too long (max 4000 chars)"
@@ -133,5 +134,5 @@ async def chat_socket(websocket: WebSocket):
             result = await run_in_threadpool(_process_message, claims, raw_session, content)
             await websocket.send_json({"type": "message", "request_id": request_id, **result})
         except Exception as exc:
-            detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            detail = exc.detail if isinstance(exc, HTTPException) else "Assistant is temporarily unavailable"
             await websocket.send_json({"type": "error", "request_id": request_id, "detail": detail})

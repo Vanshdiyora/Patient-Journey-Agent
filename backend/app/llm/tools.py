@@ -289,11 +289,13 @@ SPECS: tuple[ToolSpec, ...] = (
                     "properties": {
                         "name": {"type": "string"},
                         "code": {"type": "string"},
+                        "description": {"type": "string"},
                         "step_type": {"type": "string", "description": "e.g. TASK, APPOINTMENT, FOLLOW_UP"},
                         "owner_role": {"type": "string", "description": "PATIENT, CLINICIAN, CARE_COORDINATOR, ADMIN, AGENT or STAFF"},
                         "time_limit_hours": {"type": "integer"},
                     },
                     "required": ["name", "time_limit_hours"],
+                    "additionalProperties": False,
                 },
             },
         },
@@ -338,21 +340,19 @@ def role_capabilities(role: str) -> tuple[list[str], list[str]]:
     return allowed, denied
 
 
-def tools_for_llm() -> list[dict[str, Any]]:
-    """
-    Every tool is shown to the model whatever the user's role, so a request the
-    role may not make still reaches the server-side gate and gets the standard
-    "not permitted" answer instead of depending on the model to refuse.
-    """
+def tools_for_llm(user=None) -> list[dict[str, Any]]:
+    """Expose only role-permitted tools; the server still checks every call."""
     tools = []
     for s in SPECS:
+        if user is not None and not is_allowed(user, s):
+            continue
         who = "any signed-in user" if s.roles == ALL_ROLES else ", ".join(r.replace("_", " ").lower() for r in s.roles)
         tools.append({
             "type": "function",
             "function": {
                 "name": s.name,
                 "description": f"{s.description} (Allowed roles: {who}.)",
-                "parameters": {"type": "object", "properties": s.properties, "required": list(s.required)},
+                "parameters": {"type": "object", "properties": s.properties, "required": list(s.required), "additionalProperties": False},
             },
         })
     return tools
@@ -425,6 +425,9 @@ def _http_to_tool(exc: HTTPException) -> Exception:
 
 
 def _normalize(spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
+    unknown = set(args) - set(spec.properties)
+    if unknown:
+        raise ToolValidationError("Unknown action parameters: " + ", ".join(sorted(map(str, unknown))))
     clean: dict[str, Any] = {}
     for name, prop in spec.properties.items():
         value = args.get(name)
@@ -441,8 +444,15 @@ def _normalize(spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
             clean[name] = int_value(value, name, prop.get("minimum", 0), prop.get("maximum", 1_000_000))
         elif kind == "boolean":
             clean[name] = bool_value(value, name)
-        else:
+        elif kind == "array" and name == "steps":
+            if not isinstance(value, list) or not 1 <= len(value) <= 100:
+                raise ToolValidationError("steps must contain between 1 and 100 items")
+            allowed_step_fields = set(prop["items"]["properties"])
+            if any(not isinstance(item, dict) or set(item) - allowed_step_fields for item in value):
+                raise ToolValidationError("steps contain unknown or invalid fields")
             clean[name] = value
+        else:
+            raise ToolValidationError(f"Unsupported parameter type for {name}")
     return clean
 
 
@@ -494,8 +504,12 @@ def _check_targets(db: Session, user, spec: ToolSpec, args: dict[str, Any]) -> N
     elif spec.name == "submit_event":
         args["event_type"] = enum_value(args["event_type"], write.event_types_for(user), "event_type")
     elif spec.name == "update_exception":
-        if not db.query(ExceptionRecord).filter(ExceptionRecord.id == uuid_value(args["exception_id"], "exception_id")).first():
+        item = db.query(ExceptionRecord).filter(
+            ExceptionRecord.id == uuid_value(args["exception_id"], "exception_id")
+        ).first()
+        if not item:
             raise ToolValidationError("Exception not found")
+        readable_journey(db, user, item.journey_id)
     elif spec.name in ("set_user_role", "set_user_status"):
         write._target_user(db, user, args["user_id"])
     elif spec.name == "create_pathway":

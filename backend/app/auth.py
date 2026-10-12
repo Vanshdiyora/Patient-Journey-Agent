@@ -34,7 +34,7 @@ class LoginRequest(BaseModel):
 
 
 class SignupRequest(BaseModel):
-    """Self-service account creation. Staff roles and patients welcome."""
+    """Public self-service signup creates a patient identity only."""
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
     email: str
@@ -169,7 +169,7 @@ def me(user: Annotated[User, Depends(current_user)]):
     return user_response(user)
 
 
-VALID_SIGNUP_ROLES = ("ADMIN", "CLINICIAN", "CARE_COORDINATOR", "PATIENT")
+VALID_SIGNUP_ROLES = ("PATIENT",)
 
 
 def _signup_error(status_code: int, detail: str) -> HTTPException:

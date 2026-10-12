@@ -748,3 +748,15 @@ CREATE INDEX idx_users_role
 
 CREATE INDEX idx_users_active
     ON users(is_active);
+
+-- Staff patient grants; no grant means no patient access for clinical staff.
+CREATE TABLE staff_patient_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    staff_user_id UUID NOT NULL REFERENCES users(id),
+    patient_id UUID NOT NULL REFERENCES patients(id),
+    assigned_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_staff_patient_assignment UNIQUE (staff_user_id, patient_id)
+);
+CREATE INDEX idx_staff_patient_assignments_staff_user_id ON staff_patient_assignments(staff_user_id);
+CREATE INDEX idx_staff_patient_assignments_patient_id ON staff_patient_assignments(patient_id);

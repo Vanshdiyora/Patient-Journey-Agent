@@ -63,14 +63,18 @@ python -m pip install -r backend/requirements.txt
 python backend/scripts/setup_database.py
 ```
 
-The command creates all 15 application tables, applies every SQL migration,
-and seeds every table: 1,200 patients, 2,400 staff/patient accounts, six
+The command creates 16 application tables, applies every SQL migration,
+and seeds the 15 tables that hold demo activity: 1,200 patients, 2,400 staff/patient accounts, six
 pathways, 48 template steps, 42 dependencies, 48 action rules, 1,100 journeys,
 8,800 journey steps, 6,600 events, 2,200 action executions, 1,100 exceptions,
 4,400 agent runs, and synthetic chat sessions, messages, and audit entries for
 active users. Each patient has a linked portal account. Step time limits are
 backfilled by the migrations. All demo passwords are `Test@123`, stored as
 bcrypt hashes. Hash generation can take several minutes.
+
+The `staff_patient_assignments` table intentionally starts empty. An administrator
+must grant access to individual patients in User management before clinicians or
+care coordinators can see them.
 
 Schema creation, migrations, seeding, and verification share one transaction;
 any failure rolls back the entire setup. The command refuses databases with
@@ -93,6 +97,15 @@ SELECT email, role FROM users WHERE is_active ORDER BY role, email LIMIT 20;
 ## Existing database
 
 This code expects the PostgreSQL schema/seed already created for Patient Journey Orchestrator. It does **not** run `Base.metadata.create_all()` against the existing database.
+
+Before starting this version against an existing database, apply the new migration
+using a database migration account:
+
+```powershell
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261012_chat_access_and_audit.sql"
+```
+
+Review and grant patient assignments in User management after migration.
 
 The SQL seed previously supplied for this project creates the synthetic data.
 
@@ -320,16 +333,42 @@ so step-owner rules, the patient event allowlist and admin guards cannot drift.
 2. The user confirms or rejects in the chat UI (`Confirm` / `Reject` buttons).
 3. `POST /api/v1/chat/sessions/{sid}/messages/{mid}/confirm` re-validates
    ownership (session is scoped to the authenticated user), expiry, and role,
-   then executes. Failures roll back and are reported verbatim; the assistant
-   never claims success on failure.
+   then executes. Validation failures are shown to the user; unexpected
+   provider or execution errors return a generic message without secrets.
 4. Expired proposals never execute; the user is told to ask again.
+
+Public signup is limited to patient accounts. Administrators create staff via
+`POST /api/v1/admin/users` or User management, and grant or remove a patient's
+access with `PUT` / `DELETE /api/v1/admin/users/{user_id}/patients/{patient_id}`.
+Staff start with no patient grants. Confirmations are signed for the user,
+session, exact action, patient, and parameters. The backend claims each proposal
+once and checks current role, patient grants, and business rules at execution.
 
 ### Audit
 
-Every chatbot event — action proposed, confirmed, executed, failed, rejected,
-expired, and read-only data access — is persisted in `chat_audit_log`
-(migration `migrations/20261007_add_chat_audit.sql`). Administrators can read
-the trail via `GET /api/v1/chat/audit`.
+Chatbot decisions, validation failures, action proposals, confirmations,
+executions, failures, cancellations, expirations, and read access are recorded
+in `chat_audit_log`. The [20261012 migration](migrations/20261012_chat_access_and_audit.sql)
+adds role, patient, correlation ID, and result status and blocks updates and
+deletes with a database trigger. Only parameter names, a fingerprint, and
+reference IDs are logged; clinical text and tokens are omitted. Administrators
+can read the trail via `GET /api/v1/chat/audit`.
+
+### Prompt injection safeguards
+
+Chat rejects recognizable instructions to override or disclose its governing
+prompt before a model call and omits them from older conversation history.
+It also removes such instructions from retrieved
+tool text; if a tool result contains one, the server returns the sanitized
+result without giving the model another turn. The privileged prompt contains
+only server-owned role/scope data, not the user's display name. Provider errors
+are returned to clients as generic failures. Blocked attempts are recorded in
+`chat_audit_log` as `prompt_injection_blocked` without the submitted text.
+
+These checks reduce common attacks but cannot identify every malicious
+paraphrase. Server-side authorization, patient scope checks, and explicit
+confirmation for changes remain the security boundaries. Keep testing with
+new attack examples as the chatbot and its data sources evolve.
 
 ## Orchestration agents (Orchestrate button)
 

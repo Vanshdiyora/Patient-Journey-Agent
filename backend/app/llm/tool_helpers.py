@@ -6,9 +6,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.authorization import STAFF_ROLES, scope_patient_ids
+from app.core.authorization import STAFF_ROLES, get_journey_scoped, scope_patient_ids
 from app.models import Journey, JourneyStep, Patient, Pathway, PathwayStep
 
 
@@ -97,7 +98,7 @@ def patient_in_scope(db: Session, user, patient_id: UUID) -> Patient:
     ids = scope_patient_ids(db, user)
     if ids is not None and patient_id not in ids:
         raise ToolValidationError("Patient not found in your scope")
-    patient = patient_by_id(db, patient_id)
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
     if not patient:
         raise ToolValidationError("Patient not found")
     return patient
@@ -122,15 +123,10 @@ def target_patient_id(db: Session, user, args: dict[str, Any]) -> UUID:
 def readable_journey(db: Session, user, journey_id: UUID) -> Journey:
     """Journey the user may read; anything else reads as 'not found' so
     existence is never leaked across patients."""
-    journey = db.query(Journey).filter(Journey.id == journey_id).first()
-    if journey is None:
-        raise ToolValidationError("Journey not found")
-    if user.role == "PATIENT":
-        if journey.patient_id != user.patient_id:
-            raise ToolValidationError("Journey not found among your journeys")
-    elif user.role not in STAFF_ROLES:
-        raise ToolPermissionError("Your role cannot access journeys")
-    return journey
+    try:
+        return get_journey_scoped(journey_id, db, user)
+    except HTTPException as exc:
+        raise ToolValidationError("Journey not found") from exc
 
 
 # ---------------------------------------------------------------------------

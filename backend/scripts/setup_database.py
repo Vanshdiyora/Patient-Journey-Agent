@@ -42,6 +42,9 @@ def verify(cursor):
     """)
     if cursor.fetchone()[0]:
         raise RuntimeError("Seed verification failed: missing step time limits")
+    cursor.execute("SELECT to_regclass('public.staff_patient_assignments')")
+    if cursor.fetchone()[0] is None:
+        raise RuntimeError("Staff patient assignment migration is missing")
     return counts
 
 

@@ -197,6 +197,9 @@ def _audit_out(row) -> dict[str, Any]:
     return {
         "id": str(row.id),
         "user_id": str(row.user_id),
+        "role_at_time": row.role_at_time,
+        "correlation_id": str(row.correlation_id) if row.correlation_id else None,
+        "patient_id": str(row.patient_id) if row.patient_id else None,
         "conversation_id": str(row.conversation_id) if row.conversation_id else None,
         "message_id": str(row.message_id) if row.message_id else None,
         "tool_name": row.tool_name,
@@ -205,6 +208,7 @@ def _audit_out(row) -> dict[str, Any]:
         "target_entity_id": row.target_entity_id,
         "parameters": row.parameters,
         "permission_result": row.permission_result,
+        "result_status": row.result_status,
         "detail": row.detail,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }

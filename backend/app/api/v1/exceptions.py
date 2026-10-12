@@ -71,7 +71,7 @@ def update_exception(
     # Scope check: the exception's journey must be visible to this user.
     journey = db.query(Journey).filter(Journey.id == item.journey_id).first()
     from app.core.authorization import can_read_journey
-    if not journey or not can_read_journey(user, journey):
+    if not journey or not can_read_journey(db, user, journey):
         raise HTTPException(404, "Exception not found")
 
     # The DB enum is uppercase; the UI sends lowercase. Normalize server-side so

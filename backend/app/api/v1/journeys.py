@@ -218,7 +218,7 @@ def complete_journey_step(
         .with_for_update()
         .first()
     )
-    if not journey or not can_read_journey(user, journey):
+    if not journey or not can_read_journey(db, user, journey):
         raise HTTPException(404, "Resource not found")
     step_row = (
         db.query(JourneyStep, PathwayStep)
