@@ -62,12 +62,14 @@ The model can recommend a capability or propose a chat tool call. The server val
 2. The frontend sends the token on API requests. The backend reloads the account and applies role checks on protected endpoints.
 3. Staff see dashboard, patient, journey, exception, and agent activity views. Administrators also see user and pathway management. Patients see only journeys linked to their account.
 
-Public `/auth/signup` creates patient accounts only. Administrators provision staff accounts and assign individual patients in User management. Clinicians and care coordinators begin with no patient access; the backend filters their REST and chat reads and writes by those grants. Revoking a grant takes effect on the next request or chat confirmation. See [signup](backend/app/auth.py), [staff assignment API](backend/app/api/v1/admin.py), and [authorization](backend/app/core/authorization.py).
+Administrators create patient accounts and may assign a clinician during creation or later in User management. A clinician can also claim an unassigned patient from the Patients directory. The API returns a generated temporary password once for the administrator to share; patients can change it from their account page. Public signup is disabled. A patient can have at most one clinician, while a clinician can care for many patients. See [admin API](backend/app/api/v1/admin.py), [authentication](backend/app/auth.py), and [authorization](backend/app/core/authorization.py).
+
+The clinician Patients page has All patients, My patients, and Blocked care views. The All patients directory shows assigned doctors and lets a clinician claim an unassigned patient. Administrators can assign an unassigned patient to a doctor from the Patients list or profile. Clinicians can open profiles and journeys for their assigned patients; administrators can open all profiles, and care coordinators can open their assigned patients.
 
 ### 2. Pathway creation and journey start
 
-1. An administrator creates or versions an active pathway with ordered steps, owners, time limits, and completion criteria.
-2. Staff start that pathway for a patient. The service rejects duplicate active journeys for the same pathway code, snapshots the steps, and evaluates the initial state.
+1. An administrator creates or versions an active pathway with ordered steps, owners, target days from journey start, time allowances, and completion criteria.
+2. An administrator or the assigned clinician starts a pathway for a patient. The clinician sets priority when starting care; an administrator starts care without a priority input, so the server uses MEDIUM until the assigned clinician changes it. Care coordinators cannot start journeys. While that patient has an active or blocked journey, starting another is disabled. The service snapshots the steps and evaluates the initial state. The timeline shows each milestone's planned date and a separate action deadline when the step becomes ready.
 3. Active journeys synchronize to a newer active pathway version when their steps are next loaded.
 
 Sources: [pathway API](backend/app/api/v1/pathways.py), [journey service](backend/app/services/journey_service.py).
@@ -135,7 +137,7 @@ Recognizable instruction override attempts are rejected or removed from retrieve
 | Care coordinator | Dashboard; patient and journey views; assigned staff step work; orchestration; exceptions and coordinator tasks; action approvals; agent runs. |
 | Patient | Own profile and journeys; care plan and updates; event and owned-step submissions; own-scope chat. |
 
-The frontend also includes login and signup, route guards, paginated lists, chat history, and confirmation controls. Backend permission checks are authoritative. [Frontend overview](frontend/README.md) · [routes](frontend/src/routes/index.jsx).
+The frontend also includes login, administrator patient provisioning, password changes, route guards, paginated lists, chat history, and confirmation controls. Backend permission checks are authoritative. [Frontend overview](frontend/README.md) · [routes](frontend/src/routes/index.jsx).
 
 ## Persistent data and interfaces
 

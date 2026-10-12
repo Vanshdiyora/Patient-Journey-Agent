@@ -58,13 +58,15 @@ in `services/chat.js`. Backend authorization remains authoritative.
 ## Pages
 
 - Overview dashboard (role-specific KPIs)
-- Patients + patient profile (role-specific tabs)
-- Patient journeys + journey detail
+- Patients + patient profile (clinicians can browse all patients, filter their own and blocked care, and claim unassigned patients; administrators can create patients and assign doctors from the list or profile)
+- User management (administrators create staff accounts in a side drawer)
+- Patient profile journeys + journey detail
+- Administrators and assigned clinicians can start care journeys; only clinicians set or update priority, and starting another journey is disabled while care is active
 - Journey steps / orchestration context / events / agent activity
 - Exceptions with resolve action
 - Agent run audit view
 - Patient portal: My Journey with Overview / Care plan / Updates tabs
-- Login / protected routes
+- Login / protected routes / password change
 
 The chat widget loads older messages as the conversation is scrolled upward
 and more conversations as History is scrolled downward. It fetches batches of

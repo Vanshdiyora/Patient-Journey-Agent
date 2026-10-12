@@ -5,18 +5,20 @@ import { Select } from "../../components";
 import { useToast } from "../../context/ToastContext";
 import { pathwaysApi } from "../../services";
 import { getErrorMessage, humanize } from "../../utils";
+import DurationInput from "../../components/DurationInput";
 
-const OWNER_ROLES = ["PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "STAFF", "AGENT"];
+const OWNER_ROLES = ["PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "AGENT"];
 const OWNER_OPTIONS = OWNER_ROLES.map(role => ({ value: role, label: humanize(role) }));
 
 const fromPathway = pathway => ({
   name: pathway.name,
   description: pathway.description || "",
-  steps: (pathway.steps || []).map(step => ({
+  steps: (pathway.steps || []).map((step, index) => ({
     ...step,
     key: step.id,
     description: step.description || "",
-    owner_role: step.owner_role || "STAFF",
+    owner_role: step.owner_role === "STAFF" ? "CLINICIAN" : (step.owner_role || "CLINICIAN"),
+    due_after_days: step.due_after_days ?? index + 1,
   })),
 });
 
@@ -76,14 +78,16 @@ export default function PathwayEditDrawer({ pathway, onClose, onSaved }) {
         key: crypto.randomUUID(), code: `STEP-${number}`, name: "", description: "",
         step_type: "FOLLOWUP", owner_role: "CARE_COORDINATOR",
         required: true, time_limit_hours: 24,
+        due_after_days: Number(current.steps.at(-1)?.due_after_days ?? 0) + 1,
       }],
     };
   });
 
   const moveStep = (index, direction) => setForm(current => {
     const steps = [...current.steps];
+    const targetDays = steps.map(step => step.due_after_days);
     [steps[index], steps[index + direction]] = [steps[index + direction], steps[index]];
-    return { ...current, steps };
+    return { ...current, steps: steps.map((step, i) => ({ ...step, due_after_days: targetDays[i] })) };
   });
 
   const submit = async event => {
@@ -103,6 +107,7 @@ export default function PathwayEditDrawer({ pathway, onClose, onSaved }) {
           owner_role: step.owner_role,
           required: step.required,
           time_limit_hours: Number(step.time_limit_hours),
+          due_after_days: Number(step.due_after_days),
           completion_criteria: step.completion_criteria || null,
         })),
       });
@@ -160,7 +165,8 @@ export default function PathwayEditDrawer({ pathway, onClose, onSaved }) {
                     <label>Step name<input required maxLength="200" value={step.name} onChange={event => updateStep(index, "name", event.target.value)} /></label>
                     <label>Step type<input required maxLength="50" value={step.step_type} onChange={event => updateStep(index, "step_type", event.target.value)} /></label>
                     <div className="pathway-owner-field"><span>Responsible role</span><Select label={`Responsible role for step ${index + 1}`} value={step.owner_role} onChange={value => updateStep(index, "owner_role", value)} options={OWNER_OPTIONS} className="pathway-owner-select" /></div>
-                    <label>Time limit (hours)<input required type="number" min="1" max="8760" value={step.time_limit_hours} onChange={event => updateStep(index, "time_limit_hours", event.target.value)} /></label>
+                    <label>Target day from journey start<input required type="number" min="0" max="365" value={step.due_after_days} onChange={event => updateStep(index, "due_after_days", event.target.value)} /></label>
+                    <DurationInput label="Time allowed once ready" hours={step.time_limit_hours} onChange={value => updateStep(index, "time_limit_hours", value)} />
                     <label className="pathway-required-field"><input type="checkbox" checked={step.required} onChange={event => updateStep(index, "required", event.target.checked)} /> Required step</label>
                     <label className="pathway-description-field">Step details<textarea rows="2" maxLength="2000" value={step.description} onChange={event => updateStep(index, "description", event.target.value)} /></label>
                   </div>

@@ -45,6 +45,12 @@ def verify(cursor):
     cursor.execute("SELECT to_regclass('public.staff_patient_assignments')")
     if cursor.fetchone()[0] is None:
         raise RuntimeError("Staff patient assignment migration is missing")
+    cursor.execute("SELECT count(*) FROM pathway_steps WHERE owner_role = 'STAFF'")
+    if cursor.fetchone()[0]:
+        raise RuntimeError("Seed verification failed: generic pathway owner roles remain")
+    cursor.execute("SELECT count(*) FROM patients WHERE patient_reference ~ '^PT-2026-[0-9]{6}$' AND assigned_clinician_id IS NULL")
+    if cursor.fetchone()[0]:
+        raise RuntimeError("Seed verification failed: demo patients lack clinicians")
     return counts
 
 
@@ -92,6 +98,9 @@ def main():
                     for migration in sorted((ROOT / "backend" / "migrations").glob("*.sql")):
                         print("Applying " + migration.name, flush=True)
                         cursor.execute(read_sql(migration))
+                    print("Applying clinical demo assignments and timeline dates...", flush=True)
+                    cursor.execute(read_sql(ROOT / "db" / "clinical_seed_updates.sql"))
+                    cursor.execute(read_sql(ROOT / "db" / "clinical_timeline_schedule.sql"))
                     print("Seeding chat conversations and audit records...", flush=True)
                     cursor.execute(read_sql(ROOT / "db" / "chat_seed.sql"))
                 counts = verify(cursor)

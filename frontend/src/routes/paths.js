@@ -5,7 +5,7 @@
 export const PATHS = {
   home: "/",
   login: "/login",
-  signup: "/signup",
+  account: "/account",
   myJourney: "/my-journey",
   patients: "/patients",
   patientDetail: "/patients/:patientId",

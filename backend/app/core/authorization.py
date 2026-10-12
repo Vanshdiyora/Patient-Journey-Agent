@@ -2,7 +2,8 @@
 Role-based access control service.
 
 Centralizes every authorization decision:
-- Clinical and coordination staff see only explicitly assigned patients.
+- Clinical and coordination staff can open details and journeys only for
+  assigned patients. Clinicians may browse a limited patient directory.
 - PATIENT role users are bound to exactly one patient via users.patient_id and
   may only ever touch their own records.
 - Identity, role and patient link ALWAYS come from the authenticated DB user,
@@ -20,6 +21,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.journey import Journey
+from app.models.patient import Patient
 from app.models.staff_patient_assignment import StaffPatientAssignment
 
 STAFF_ROLES = ("ADMIN", "CLINICIAN", "CARE_COORDINATOR")
@@ -58,7 +60,9 @@ def can_read_journey(db: Session, user: User, journey: Journey) -> bool:
         return True
     if user.role == "PATIENT":
         return journey.patient_id == user.patient_id
-    if user.role in ("CLINICIAN", "CARE_COORDINATOR"):
+    if user.role == "CLINICIAN":
+        return db.query(Patient.id).filter(Patient.id == journey.patient_id, Patient.assigned_clinician_id == user.id).first() is not None
+    if user.role == "CARE_COORDINATOR":
         return db.query(StaffPatientAssignment.id).filter(
             StaffPatientAssignment.staff_user_id == user.id,
             StaffPatientAssignment.patient_id == journey.patient_id,
@@ -74,7 +78,9 @@ def scope_patient_ids(db: Session, user: User) -> list[UUID] | None:
         return None
     if user.role == "PATIENT":
         return [user.patient_id] if user.patient_id else []
-    if user.role in ("CLINICIAN", "CARE_COORDINATOR"):
+    if user.role == "CLINICIAN":
+        return [row[0] for row in db.query(Patient.id).filter(Patient.assigned_clinician_id == user.id).all()]
+    if user.role == "CARE_COORDINATOR":
         return [row[0] for row in db.query(StaffPatientAssignment.patient_id).filter(
             StaffPatientAssignment.staff_user_id == user.id
         ).all()]

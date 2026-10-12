@@ -12,7 +12,7 @@ export default function JourneyMetrics({ stepRows, eventTotal, processedTotal, n
       </div>
       <div className="metric-card">
         <div className="metric-icon metric-icon--blue"><Clock3 size={20} /></div>
-        <div className="metric-copy"><span>Next step</span><strong>{nextStep ? nextStep.name || `Step ${stepRows.indexOf(nextStep) + 1}` : "All done"}</strong><small>{nextStep?.due_at ? `Due ${formatDate(nextStep.due_at)}` : "No pending steps"}</small></div>
+        <div className="metric-copy"><span>Next step</span><strong>{nextStep ? nextStep.name || `Step ${stepRows.indexOf(nextStep) + 1}` : "All done"}</strong><small>{nextStep?.due_at ? `Action due ${formatDate(nextStep.due_at)}` : nextStep?.planned_due_at ? `Pathway target ${formatDate(nextStep.planned_due_at)}` : "No pending steps"}</small></div>
       </div>
       <div className="metric-card">
         <div className="metric-icon metric-icon--amber"><FileText size={20} /></div>

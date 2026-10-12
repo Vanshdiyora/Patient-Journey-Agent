@@ -26,7 +26,7 @@ def build_supervisor_context(db: Session, journey_id: UUID):
             "step_code": pathway_step.code if pathway_step else None,
             "step_name": pathway_step.name if pathway_step else None,
             "step_type": pathway_step.step_type if pathway_step else None,
-            "owner_role": step.owner_role or (pathway_step.owner_role if pathway_step else None) or "STAFF",
+            "owner_role": step.owner_role or (pathway_step.owner_role if pathway_step else None) or "CLINICIAN",
             "status": item["status"],
             "blocked": item["blocked"],
             "ready": item["ready"],

@@ -14,10 +14,10 @@ export const TABS_BY_ROLE = {
     { id: "has_exceptions", label: "With exceptions", icon: AlertTriangle },
     { id: "active", label: "Active journeys" },
   ],
-  // Clinician: clinically actionable slices.
+  // Clinician: the directory plus patients in this clinician's care.
   CLINICIAN: [
     { id: "", label: "All patients" },
-    { id: "high_priority", label: "High priority" },
+    { id: "mine", label: "My patients" },
     { id: "blocked", label: "Blocked care" },
   ],
   // Coordinator: coordination queue oriented slices.

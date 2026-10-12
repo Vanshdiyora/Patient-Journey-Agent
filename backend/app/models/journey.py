@@ -29,7 +29,7 @@ class JourneyStep(Base):
     journey_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
     pathway_step_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     status: Mapped[str] = mapped_column(journey_step_status_enum, index=True)
-    owner_role: Mapped[str] = mapped_column(String, default="STAFF")
+    owner_role: Mapped[str] = mapped_column(String, default="CLINICIAN")
     time_limit_hours: Mapped[int | None] = mapped_column(Integer)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
