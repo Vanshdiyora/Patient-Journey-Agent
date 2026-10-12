@@ -364,6 +364,10 @@ result without giving the model another turn. The privileged prompt contains
 only server-owned role/scope data, not the user's display name. Provider errors
 are returned to clients as generic failures. Blocked attempts are recorded in
 `chat_audit_log` as `prompt_injection_blocked` without the submitted text.
+If audit storage is unavailable, the assistant still returns a server-written
+refusal without calling the model; that turn is not saved, and the server logs
+a correlation ID. Apply the audit migration to restore persisted chat history
+and audit records for blocked attempts.
 
 These checks reduce common attacks but cannot identify every malicious
 paraphrase. Server-side authorization, patient scope checks, and explicit

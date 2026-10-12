@@ -21,6 +21,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.authorization import scope_note
@@ -37,6 +38,10 @@ logger = logging.getLogger(__name__)
 MAX_HISTORY_MESSAGES = 20
 # A proposed action must be confirmed within this window or it expires.
 PENDING_ACTION_TTL_MINUTES = 15
+INJECTION_REFUSAL = (
+    "I can't bypass authorization or disclose information outside your permitted access. "
+    "Please ask about records or actions available to your account."
+)
 
 # Pending-action lifecycle statuses (stored in message meta).
 PENDING = "pending"
@@ -411,12 +416,30 @@ def process_user_message(
     if len(text) > 4000:
         raise HTTPException(422, "Message too long (max 4000 chars)")
     if contains_instruction_override(text):
-        audit(db, user=user, session=session, tool_name="chat_message",
-              event="prompt_injection_blocked", permission_result="denied",
-              detail="Instruction override attempt in user message",
-              correlation_id=correlation_id)
-        db.commit()
-        raise HTTPException(422, "Please ask about a patient journey without instructions to override the assistant.")
+        refusal_meta = {"permission_denied": {"reason": "instruction_override"}}
+        try:
+            user_msg = _add_message(db, session, "user", text)
+            assistant_msg = _add_message(db, session, "assistant", INJECTION_REFUSAL, refusal_meta)
+            audit(db, user=user, session=session, message=assistant_msg, tool_name="chat_message",
+                  event="prompt_injection_blocked", permission_result="denied",
+                  detail="Instruction override attempt in user message",
+                  correlation_id=correlation_id)
+            db.commit()
+            db.refresh(assistant_msg)
+            db.refresh(session)
+        except SQLAlchemyError as exc:
+            # A missing audit migration must never send a blocked request to the
+            # model or disguise the refusal as an LLM/provider outage. The UI
+            # receives this turn, while the server records a metadata-only error.
+            db.rollback()
+            logger.error("Chat security audit unavailable: %s; correlation_id=%s",
+                         type(exc).__name__, correlation_id)
+            user_msg = ChatMessage(id=uuid4(), session_id=session_id, role="user",
+                                   content=text, created_at=_utcnow())
+            assistant_msg = ChatMessage(id=uuid4(), session_id=session_id, role="assistant",
+                                        content=INJECTION_REFUSAL, meta=refusal_meta,
+                                        created_at=_utcnow())
+        return {"session": session, "user_message": user_msg, "assistant_message": assistant_msg}
 
     user_msg = _add_message(db, session, "user", text)
     if session.title == "New conversation":
