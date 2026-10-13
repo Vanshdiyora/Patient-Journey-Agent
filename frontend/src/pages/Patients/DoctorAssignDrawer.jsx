@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { adminApi } from "../../services";
 import { useAsync } from "../../hooks/useAsync";
 import { getErrorMessage } from "../../utils";
+import { Select } from "../../components";
 
 export default function DoctorAssignDrawer({ patient, onClose, onAssigned }) {
   const [doctorId, setDoctorId] = useState("");
@@ -26,7 +27,7 @@ export default function DoctorAssignDrawer({ patient, onClose, onAssigned }) {
     const onKeyDown = event => {
       if (event.key === "Escape" && !busyRef.current) onClose();
       if (event.key !== "Tab") return;
-      const focusable = [...document.querySelectorAll(".doctor-assign-drawer button:not([disabled]), .doctor-assign-drawer input:not([disabled]), .doctor-assign-drawer select:not([disabled])")];
+      const focusable = [...document.querySelectorAll(".doctor-assign-drawer button:not([disabled]), .doctor-assign-drawer input:not([disabled]):not([tabindex='-1']), .doctor-assign-drawer select:not([disabled])")];
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first) return;
@@ -67,10 +68,9 @@ export default function DoctorAssignDrawer({ patient, onClose, onAssigned }) {
         <form className="pathway-form pathway-drawer-form" onSubmit={submit}>
           <div className="pathway-drawer-content">
             <label>Find a doctor<input type="search" value={search} onChange={event => { setSearch(event.target.value); setDoctorId(""); }} placeholder="Search by name or email" disabled={loading || busy} /></label>
-            <label>Doctor<select required value={doctorId} onChange={event => setDoctorId(event.target.value)} disabled={loading || busy}>
-              <option value="">Choose a doctor</option>
-              {matchingDoctors.slice(0, 50).map(doctor => <option key={doctor.id} value={doctor.id}>{doctor.name} ({doctor.email})</option>)}
-            </select></label>
+            <label>Doctor<Select className="form-select" required label="Doctor" value={doctorId} onChange={setDoctorId} disabled={loading || busy} placeholder="Choose a doctor" options={[
+              ...matchingDoctors.slice(0, 50).map(doctor => ({ value: String(doctor.id), label: `${doctor.name} (${doctor.email})` })),
+            ]} /></label>
             {matchingDoctors.length > 50 && <p className="staff-create-hint">Showing 50 doctors. Search by name or email to narrow the list.</p>}
             {!loading && !doctorsError && (doctors || []).length > 0 && !matchingDoctors.length && <p className="staff-create-hint">No doctors match that search.</p>}
             <p className="staff-create-hint">Once assigned, this patient cannot be reassigned to another doctor.</p>

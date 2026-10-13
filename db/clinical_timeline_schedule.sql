@@ -8,7 +8,7 @@ WITH RECURSIVE ordered AS (
            GREATEST(COALESCE(ps.due_after_days, 0), 0) AS target_day
     FROM pathway_steps ps
     JOIN pathways p ON p.id = ps.pathway_id
-    WHERE ps.sequence_number = 1 AND p.code IN (
+    WHERE ps.sequence_number = 1 AND p.status = 'ACTIVE' AND p.code IN (
         'CARD-POST-PCI', 'ORTHO-TKA', 'ONCO-NEW',
         'DIAB-ANNUAL', 'CHF-DISCHARGE', 'COPD-EXAC'
     )
@@ -25,14 +25,27 @@ WITH RECURSIVE ordered AS (
 UPDATE pathway_steps ps SET
     due_after_days = schedule.target_day,
     time_limit_hours = CASE
-        WHEN schedule.sequence_number = 1 THEN LEAST(GREATEST(COALESCE(ps.time_limit_hours, 24), 1), 24)
-        ELSE GREATEST(schedule.target_day - schedule.previous_day, 1) * 24
+        WHEN ps.code IN ('PHONE-72H', 'PHONE-30D') THEN 24
+        WHEN ps.code = 'AUTH' THEN 72
+        WHEN ps.step_type IN ('PROCEDURE', 'THERAPY') THEN 168
+        WHEN ps.step_type = 'DISCHARGE' THEN 24
+        WHEN ps.step_type IN ('LAB', 'CLINICAL', 'SCREENING', 'PREVENTION') THEN 48
+        WHEN ps.step_type IN ('ADMIN', 'APPOINTMENT', 'FOLLOWUP', 'REFERRAL', 'EDUCATION', 'COUNSELLING', 'CLOSURE') THEN 72
+        ELSE 48
     END
 FROM schedule WHERE ps.id = schedule.id;
 
-UPDATE journey_steps js SET time_limit_hours = ps.time_limit_hours
-FROM pathway_steps ps, journeys j, patients p
-WHERE js.pathway_step_id = ps.id AND js.journey_id = j.id AND j.patient_id = p.id
+UPDATE journey_steps js SET
+    owner_role = active_step.owner_role,
+    time_limit_hours = active_step.time_limit_hours
+FROM pathway_steps source_step
+JOIN pathways source_pathway ON source_pathway.id = source_step.pathway_id
+JOIN pathways active_pathway ON active_pathway.code = source_pathway.code AND active_pathway.status = 'ACTIVE'
+JOIN pathway_steps active_step ON active_step.pathway_id = active_pathway.id AND active_step.code = source_step.code
+JOIN journeys j ON j.pathway_id = source_pathway.id
+JOIN patients p ON p.id = j.patient_id
+WHERE js.pathway_step_id = source_step.id
+  AND js.journey_id = j.id
   AND p.patient_reference ~ '^PT-2026-[0-9]{6}$';
 
 UPDATE journeys j SET

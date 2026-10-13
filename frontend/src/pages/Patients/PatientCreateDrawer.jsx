@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { adminApi } from "../../services";
 import { getErrorMessage } from "../../utils";
+import { Select } from "../../components";
 
 const emptyForm = { first_name: "", last_name: "", email: "", date_of_birth: "", gender: "", clinician_id: "" };
 
@@ -23,7 +24,7 @@ export default function PatientCreateDrawer({ clinicians, cliniciansError, onClo
     const onKeyDown = event => {
       if (event.key === "Escape" && !busyRef.current) onClose();
       if (event.key !== "Tab") return;
-      const focusable = [...document.querySelectorAll(".patient-create-drawer button:not([disabled]), .patient-create-drawer input:not([disabled]), .patient-create-drawer select:not([disabled])")];
+      const focusable = [...document.querySelectorAll(".patient-create-drawer button:not([disabled]), .patient-create-drawer input:not([disabled]):not([tabindex='-1']), .patient-create-drawer select:not([disabled])")];
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first) return;
@@ -68,18 +69,17 @@ export default function PatientCreateDrawer({ clinicians, cliniciansError, onClo
               <label>Last name<input required maxLength={80} autoComplete="family-name" value={form.last_name} onChange={event => set("last_name", event.target.value)} /></label>
               <label className="patient-drawer-full">Patient email<input required type="email" autoComplete="email" value={form.email} onChange={event => set("email", event.target.value)} /></label>
               <label>Date of birth<input required type="date" max={new Date().toISOString().slice(0, 10)} value={form.date_of_birth} onChange={event => set("date_of_birth", event.target.value)} /></label>
-              <label>Gender<select required value={form.gender} onChange={event => set("gender", event.target.value)}>
-                <option value="">Select gender</option>
-                <option value="Female">Female</option>
-                <option value="Male">Male</option>
-                <option value="Non-binary">Non-binary</option>
-                <option value="Other">Other</option>
-                <option value="Prefer not to say">Prefer not to say</option>
-              </select></label>
-              <label className="patient-drawer-full">Assign clinician (optional)<select value={form.clinician_id} onChange={event => set("clinician_id", event.target.value)}>
-                <option value="">Assign later</option>
-                {(clinicians || []).map(clinician => <option key={clinician.id} value={clinician.id}>{clinician.name} ({clinician.email})</option>)}
-              </select></label>
+              <label>Gender<Select className="form-select" required label="Gender" value={form.gender} onChange={value => set("gender", value)} placeholder="Select gender" options={[
+                { value: "Female", label: "Female" },
+                { value: "Male", label: "Male" },
+                { value: "Non-binary", label: "Non-binary" },
+                { value: "Other", label: "Other" },
+                { value: "Prefer not to say", label: "Prefer not to say" },
+              ]} /></label>
+              <label className="patient-drawer-full">Assign clinician (optional)<Select className="form-select" label="Assign clinician (optional)" value={form.clinician_id} onChange={value => set("clinician_id", value)} placeholder="Assign later" options={[
+                { value: "", label: "Assign later" },
+                ...(clinicians || []).map(clinician => ({ value: String(clinician.id), label: `${clinician.name} (${clinician.email})` })),
+              ]} /></label>
             </div>
             {cliniciansError && <div className="form-error" role="alert">Could not load clinicians: {getErrorMessage(cliniciansError)}</div>}
             {error && <div className="form-error" role="alert">{error}</div>}

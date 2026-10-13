@@ -20,6 +20,7 @@ export default function Select({
   label,
   placeholder = "Select…",
   disabled = false,
+  required = false,
   className = "",
 }) {
   const [open, setOpen] = useState(false);
@@ -179,7 +180,7 @@ export default function Select({
   const selected = valueIndex >= 0 ? options[valueIndex] : null;
   // Empty value + a `label` prop: show the label as the trigger text so
   // toolbar filters read "All statuses", "All priorities", etc.
-  const display = selected?.label ?? (value ? value : label ?? placeholder);
+  const display = selected?.label ?? (value ? value : placeholder !== "Select…" ? placeholder : label ?? placeholder);
 
   return (
     <div className={`select-root ${className}`.trim()}>
@@ -191,12 +192,25 @@ export default function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label || undefined}
+        aria-required={required || undefined}
+        aria-invalid={required && !value || undefined}
         onKeyDown={onKeyDown}
         onClick={toggle}
       >
         <span className={`select-value ${!selected && label ? "select-value--muted" : ""}`}>{display}</span>
         <ChevronDown size={15} className={`select-chevron ${open ? "select-chevron--open" : ""}`} />
       </button>
+      {required && (
+        <input
+          className="select-validation-input"
+          aria-hidden="true"
+          tabIndex={-1}
+          required
+          value={value ?? ""}
+          onChange={() => {}}
+          onInvalid={() => triggerRef.current?.focus()}
+        />
+      )}
 
       {open && createPortal(
         <ul
