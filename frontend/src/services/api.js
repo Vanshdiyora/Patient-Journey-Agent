@@ -2,10 +2,10 @@
 
 import api, { get, post, patch } from "./client";
 
-/** Login, signup and identity endpoints. */
+/** Login and identity endpoints. */
 export const authApi = {
   login: (payload) => post("/api/v1/auth/login", payload),
-  signup: (payload) => post("/api/v1/auth/signup", payload),
+  changePassword: (payload) => post("/api/v1/auth/change-password", payload),
   me: () => get("/api/v1/users/me"),
 };
 
@@ -19,9 +19,10 @@ export const healthApi = {
   check: () => get("/api/v1/health"),
 };
 
-/** Patient directory (staff only, scoped server-side). */
+/** Patient directory (staff only; clinician directory rows are limited server-side). */
 export const patientsApi = {
   list: (params) => get("/api/v1/patients", params),
+  claim: (id) => post(`/api/v1/patients/${id}/claim`),
   get: (id) => get(`/api/v1/patients/${id}`),
   journeys: (id, params) => get(`/api/v1/patients/${id}/journeys`, params),
   startJourney: (id, payload) => post(`/api/v1/patients/${id}/journeys`, payload),
@@ -35,6 +36,7 @@ export const journeysApi = {
   list: (params) => get("/api/v1/journeys", params),
   availablePathways: () => get("/api/v1/journeys/available-pathways"),
   get: (id) => get(`/api/v1/journeys/${id}`),
+  updatePriority: (id, priority) => patch(`/api/v1/journeys/${id}/priority`, { priority }),
   steps: (id) => get(`/api/v1/journeys/${id}/steps`),
   completeStep: (journeyId, stepId) =>
     post(`/api/v1/journeys/${journeyId}/steps/${stepId}/complete`, { confirmed: true }),
@@ -89,6 +91,8 @@ export const agentsApi = {
  */
 export const adminApi = {
   users: (params) => get("/api/v1/admin/users", params),
+  clinicians: () => get("/api/v1/admin/clinicians"),
+  createPatient: (payload) => post("/api/v1/admin/patients", payload),
   createStaff: (payload) => post("/api/v1/admin/users", payload),
   patientAssignments: (id) => get(`/api/v1/admin/users/${id}/patients`),
   assignPatient: (id, patientId) => api.put(`/api/v1/admin/users/${id}/patients/${patientId}`).then(r => r.data),

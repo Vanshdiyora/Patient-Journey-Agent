@@ -27,7 +27,7 @@ class PathwayStep(Base):
     step_type: Mapped[str] = mapped_column(String)
     sequence_number: Mapped[int] = mapped_column(Integer)
     required: Mapped[bool] = mapped_column(Boolean)
-    owner_role: Mapped[str] = mapped_column(String, default="STAFF")
+    owner_role: Mapped[str] = mapped_column(String, default="CLINICIAN")
     due_after_days: Mapped[int | None] = mapped_column(Integer)
     time_limit_hours: Mapped[int | None] = mapped_column(Integer)
     completion_criteria: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

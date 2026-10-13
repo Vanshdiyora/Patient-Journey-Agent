@@ -1,6 +1,6 @@
 import {
-  AlertTriangle, Bot, HeartPulse, LayoutDashboard, Network,
-  ListChecks, UserCog, Users,
+  AlertTriangle, Bot, HeartPulse, LayoutDashboard,
+  ListChecks, LockKeyhole, UserCog, Users,
 } from "lucide-react";
 import { ROLES, roleOf } from "../utils/roles";
 import { PATHS } from "../routes/paths";
@@ -20,7 +20,6 @@ export const PORTALS = {
     items: [
       { to: PATHS.home, label: "Overview", icon: LayoutDashboard, end: true },
       { to: PATHS.patients, label: "Patients", icon: Users },
-      { to: PATHS.journeys, label: "Patient journeys", icon: Network },
       { to: PATHS.exceptions, label: "Exceptions", icon: AlertTriangle },
       { to: PATHS.agentRuns, label: "Agent activity", icon: Bot },
       { to: PATHS.pathways, label: "Care pathways", icon: ListChecks, adminOnly: true },
@@ -34,8 +33,7 @@ export const PORTALS = {
     theme: "theme-clinician",
     items: [
       { to: PATHS.home, label: "Clinical overview", icon: LayoutDashboard, end: true },
-      { to: PATHS.patients, label: "My patients", icon: Users },
-      { to: PATHS.journeys, label: "Journeys", icon: Network },
+      { to: PATHS.patients, label: "Patients", icon: Users },
       { to: PATHS.exceptions, label: "Clinical exceptions", icon: AlertTriangle },
     ],
   },
@@ -47,7 +45,6 @@ export const PORTALS = {
     items: [
       { to: PATHS.home, label: "Coordination overview", icon: LayoutDashboard, end: true },
       { to: PATHS.patients, label: "Patients", icon: Users },
-      { to: PATHS.journeys, label: "Journeys", icon: Network },
       { to: PATHS.exceptions, label: "Follow-up queue", icon: AlertTriangle },
     ],
   },
@@ -58,6 +55,7 @@ export const PORTALS = {
     theme: "theme-patient",
     items: [
       { to: PATHS.myJourney, label: "My Journey", icon: HeartPulse, end: true },
+      { to: PATHS.account, label: "Change password", icon: LockKeyhole },
     ],
   },
 };

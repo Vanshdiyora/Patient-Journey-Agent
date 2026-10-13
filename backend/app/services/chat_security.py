@@ -17,6 +17,7 @@ from app.core.config import settings
 _OVERRIDE_PATTERNS = (
     re.compile(r"\b(?:ignore|disregard|forget|override)\s+(?:(?:all|any|the)\s+)?(?:previous|prior|above|system|developer)\s+(?:instructions?|rules?|prompts?|messages?)\b", re.I),
     re.compile(r"\b(?:reveal|print|show|dump|repeat|expose)\s+(?:(?:the|your|full|hidden|secret)\s+)*(?:system|developer)\s+(?:prompt|message|instructions?)\b", re.I),
+    re.compile(r"\b(?:reveal|print|show|dump|repeat|expose)\s+(?:(?:me|us|the|your|all)\s+)*(?:hidden|internal|secret)\s+(?:(?:system|developer)\s+)?(?:instructions?|prompts?|rules?|messages?)\b", re.I),
     re.compile(r"\b(?:you are now|act as|pretend (?:you are|to be))\s+(?:an?\s+|the\s+)?(?:system|developer|administrator|admin)\b", re.I),
     re.compile(r"(?:\[im_start\]|<\|im_start\|>|\[start_header_id\]|<\|start_header_id\|>)\s*(?:system|developer|assistant|tool)\b", re.I),
     re.compile(r"(?:^|\n)\s*(?:#{1,6}\s*)?(?:system|developer)\s*(?:message|instructions?|prompt)?\s*:", re.I),

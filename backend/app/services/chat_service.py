@@ -39,8 +39,8 @@ MAX_HISTORY_MESSAGES = 20
 # A proposed action must be confirmed within this window or it expires.
 PENDING_ACTION_TTL_MINUTES = 15
 INJECTION_REFUSAL = (
-    "I can't bypass authorization or disclose information outside your permitted access. "
-    "Please ask about records or actions available to your account."
+    "I can't reveal private instructions, bypass authorization, or disclose information "
+    "outside your permitted access. Please ask about records or actions available to your account."
 )
 
 # Pending-action lifecycle statuses (stored in message meta).

@@ -36,7 +36,7 @@ from app.llm.tool_helpers import (
     uuid_value,
 )
 from app.models import ExceptionRecord, JourneyStep, Pathway, PathwayStep, User
-from app.services.journey_service import find_active_journey
+from app.services.journey_service import find_active_patient_journey
 
 ALL_ROLES = ("PATIENT",) + STAFF_ROLES
 STAFF = STAFF_ROLES
@@ -180,10 +180,10 @@ SPECS: tuple[ToolSpec, ...] = (
         "start_pathway", "start a care pathway for a patient",
         "Start an active care pathway for a patient: creates the journey, its stages and pending tasks. "
         "Requires user confirmation.",
-        STAFF, write.tool_start_pathway,
+        ("CLINICIAN",), write.tool_start_pathway,
         {"patient_id": PATIENT_ID, "pathway_id": _s("Pathway id (UUID). Get it from list_pathways."), "priority": PRIORITY},
-        ("patient_id", "pathway_id"), confirm=True,
-        ask={"patient_id": "which patient (name or patient reference)", "pathway_id": "which care pathway"},
+        ("patient_id", "pathway_id", "priority"), confirm=True,
+        ask={"patient_id": "which patient (name or patient reference)", "pathway_id": "which care pathway", "priority": "which priority (low, medium, high, or critical)"},
     ),
     ToolSpec(
         "submit_event", "record an update on a journey",
@@ -291,7 +291,7 @@ SPECS: tuple[ToolSpec, ...] = (
                         "code": {"type": "string"},
                         "description": {"type": "string"},
                         "step_type": {"type": "string", "description": "e.g. TASK, APPOINTMENT, FOLLOW_UP"},
-                        "owner_role": {"type": "string", "description": "PATIENT, CLINICIAN, CARE_COORDINATOR, ADMIN, AGENT or STAFF"},
+                        "owner_role": {"type": "string", "description": "PATIENT, CLINICIAN, CARE_COORDINATOR, ADMIN or AGENT"},
                         "time_limit_hours": {"type": "integer"},
                     },
                     "required": ["name", "time_limit_hours"],
@@ -499,8 +499,8 @@ def _check_targets(db: Session, user, spec: ToolSpec, args: dict[str, Any]) -> N
         ).first()
         if not pathway:
             raise ToolValidationError("That is not an active care pathway")
-        if find_active_journey(db, uuid_value(args["patient_id"], "patient_id"), pathway.id):
-            raise ToolValidationError("This patient already has an active journey for this pathway")
+        if find_active_patient_journey(db, uuid_value(args["patient_id"], "patient_id")):
+            raise ToolValidationError("This patient already has an active care journey")
     elif spec.name == "submit_event":
         args["event_type"] = enum_value(args["event_type"], write.event_types_for(user), "event_type")
     elif spec.name == "update_exception":

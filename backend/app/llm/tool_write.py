@@ -71,11 +71,15 @@ def tool_start_pathway(db: Session, user, args: dict[str, Any]) -> dict[str, Any
     """Same service function as POST /patients/{id}/journeys."""
     args = require_dict(args)
     staff_required(user)
+    if user.role != "CLINICIAN":
+        raise ToolPermissionError("Only an assigned clinician can start a care pathway")
     patient_id = uuid_value(args.get("patient_id"), "patient_id")
     pathway_id = uuid_value(args.get("pathway_id"), "pathway_id")
-    priority = enum_value(args.get("priority") or "MEDIUM", PRIORITIES, "priority")
+    priority = enum_value(args.get("priority"), PRIORITIES, "priority")
 
     patient = patient_in_scope(db, user, patient_id)
+    if patient.assigned_clinician_id != user.id:
+        raise ToolPermissionError("This patient is assigned to another clinician")
     journey = start_journey_for_patient(db, patient_id, pathway_id, priority)
     db.commit()
     db.refresh(journey)
@@ -353,7 +357,7 @@ def describe_action(db: Session, user, name: str, args: dict[str, Any]) -> dict[
                 "patient": patient_name(patient),
                 "patient_reference": patient.patient_reference if patient else None,
                 "pathway": pathway.name if pathway else None,
-                "priority": args.get("priority") or "MEDIUM",
+                "priority": args.get("priority"),
                 "changes": [
                     "Create the journey",
                     f"Initialize {n_steps} pathway stage{'s' if n_steps != 1 else ''}",

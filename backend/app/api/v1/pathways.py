@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from math import ceil
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,6 +34,7 @@ def _serialize_pathway(pathway: Pathway, steps: list[PathwayStep]) -> dict:
                 "required": step.required,
                 "owner_role": step.owner_role,
                 "time_limit_hours": step.time_limit_hours,
+                "due_after_days": step.due_after_days,
                 "completion_criteria": step.completion_criteria,
             }
             for step in steps
@@ -89,7 +91,12 @@ def create_pathway(
         updated_at=now,
     )
     db.add(pathway)
+    previous_day = -1
     for sequence_number, template in enumerate(data.steps, start=1):
+        target_day = template.due_after_days if template.due_after_days is not None else previous_day + max(1, ceil(template.time_limit_hours / 24))
+        if target_day < previous_day:
+            raise HTTPException(422, "Step target days must follow pathway order")
+        previous_day = target_day
         db.add(
             PathwayStep(
                 id=uuid4(),
@@ -101,7 +108,7 @@ def create_pathway(
                 sequence_number=sequence_number,
                 required=True,
                 owner_role=template.owner_role,
-                due_after_days=None,
+                due_after_days=target_day,
                 time_limit_hours=template.time_limit_hours,
                 completion_criteria=template.completion_criteria,
                 created_at=now,
@@ -160,14 +167,19 @@ def update_pathway(
     previous.updated_at = now
 
     step_ids = {}
+    previous_day = -1
     for sequence_number, template in enumerate(data.steps, start=1):
         source = by_id.get(template.id)
+        target_day = template.due_after_days if template.due_after_days is not None else (source.due_after_days if source and source.due_after_days is not None else previous_day + max(1, ceil(template.time_limit_hours / 24)))
+        if target_day < previous_day:
+            raise HTTPException(422, "Step target days must follow pathway order")
+        previous_day = target_day
         new_step = PathwayStep(
             id=uuid4(), pathway_id=updated.id, code=template.code,
             name=template.name, description=template.description,
             step_type=template.step_type, sequence_number=sequence_number,
             required=template.required, owner_role=template.owner_role,
-            due_after_days=source.due_after_days if source else None,
+            due_after_days=target_day,
             time_limit_hours=template.time_limit_hours,
             completion_criteria=template.completion_criteria if template.completion_criteria is not None else (source.completion_criteria if source else None),
             created_at=now, updated_at=now,

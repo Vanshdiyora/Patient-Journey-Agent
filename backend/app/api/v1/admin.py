@@ -3,10 +3,11 @@ Admin-only user management endpoints. Every route requires the ADMIN role —
 checked server-side via require_admin; the hidden UI menu is not the gate.
 """
 import uuid
-from datetime import datetime, timezone
+import secrets
+from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -51,6 +52,28 @@ class StaffCreate(BaseModel):
         return normalize_account_email(value)
 
 
+class PatientCreate(BaseModel):
+    first_name: str = Field(min_length=1, max_length=80)
+    last_name: str = Field(min_length=1, max_length=80)
+    email: str
+    date_of_birth: date
+    gender: str = Field(min_length=1, max_length=30)
+    clinician_id: uuid.UUID | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value):
+        return normalize_account_email(value)
+
+    @field_validator("first_name", "last_name", "gender")
+    @classmethod
+    def strip_required(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("This field is required")
+        return value
+
+
 def _serialize(u: User) -> dict:
     return {
         "id": str(u.id),
@@ -62,6 +85,54 @@ def _serialize(u: User) -> dict:
         "created_at": u.created_at,
         "updated_at": u.updated_at,
     }
+
+
+@router.get("/clinicians")
+def list_clinicians(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+    rows = db.query(User).filter(User.role == "CLINICIAN", User.is_active.is_(True)).order_by(User.display_name, User.id).all()
+    return [{"id": str(user.id), "name": user.display_name, "email": user.email} for user in rows]
+
+
+@router.post("/patients", status_code=201)
+def create_patient(data: PatientCreate, response: Response, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Provision a patient, with an optional initial clinician assignment."""
+    if data.date_of_birth > date.today():
+        raise HTTPException(422, "Date of birth cannot be in the future")
+    clinician = None
+    if data.clinician_id is not None:
+        clinician = db.query(User).filter(User.id == data.clinician_id, User.role == "CLINICIAN", User.is_active.is_(True)).first()
+        if clinician is None:
+            raise HTTPException(422, "Choose an active clinician")
+    if db.query(User.id).filter(User.email == data.email).first() or db.query(Patient.id).filter(Patient.email == data.email).first():
+        raise HTTPException(409, "An account with this email already exists")
+    now = datetime.now(timezone.utc)
+    patient_id = uuid.uuid4()
+    temporary_password = secrets.token_urlsafe(18)
+    patient = Patient(
+        id=patient_id, patient_reference=f"PT-{now.year}-{uuid.uuid4().hex[:10].upper()}",
+        first_name=data.first_name, last_name=data.last_name, email=data.email,
+        date_of_birth=data.date_of_birth, gender=data.gender,
+        assigned_clinician_id=clinician.id if clinician else None, created_at=now, updated_at=now,
+    )
+    db.add(patient)
+    db.add(User(
+        id=uuid.uuid4(), email=data.email, password_hash=hash_password(temporary_password),
+        display_name=f"{data.first_name} {data.last_name}", role="PATIENT", patient_id=patient_id,
+        is_active=True, created_at=now, updated_at=now,
+    ))
+    if clinician:
+        db.add(StaffPatientAssignment(staff_user_id=clinician.id, patient_id=patient_id, assigned_by_user_id=admin.id))
+    _audit_change(db, admin, "create_patient", {"patient_id": str(patient_id), "clinician_id": str(clinician.id) if clinician else None})
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Patient email or reference already exists") from exc
+    # The plaintext secret exists only in this response and is never persisted.
+    response.headers["Cache-Control"] = "no-store"
+    return {"id": str(patient_id), "patient_reference": patient.patient_reference,
+            "email": data.email, "temporary_password": temporary_password,
+            "clinician_id": str(clinician.id) if clinician else None}
 
 
 @router.get("/users")
@@ -144,8 +215,14 @@ def assign_patient(
     admin: User = Depends(require_admin),
 ):
     _assignable_staff(db, user_id)
-    if not db.query(Patient.id).filter(Patient.id == patient_id).first():
+    patient = db.query(Patient).filter(Patient.id == patient_id).with_for_update().first()
+    if not patient:
         raise HTTPException(404, "Patient not found")
+    staff = _assignable_staff(db, user_id)
+    if staff.role == "CLINICIAN":
+        if patient.assigned_clinician_id and patient.assigned_clinician_id != user_id:
+            raise HTTPException(409, "Patient already has an assigned clinician and cannot be reassigned")
+        patient.assigned_clinician_id = user_id
     existing = db.query(StaffPatientAssignment).filter(
         StaffPatientAssignment.staff_user_id == user_id,
         StaffPatientAssignment.patient_id == patient_id,
@@ -164,6 +241,8 @@ def assign_patient(
             ).first()
             if not already_granted:
                 raise HTTPException(500, "Could not grant patient access") from exc
+    elif staff.role == "CLINICIAN" and patient.assigned_clinician_id == user_id:
+        db.commit()
     return {"staff_user_id": str(user_id), "patient_id": str(patient_id), "assigned": True}
 
 
@@ -174,7 +253,9 @@ def unassign_patient(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
-    _assignable_staff(db, user_id)
+    staff = _assignable_staff(db, user_id)
+    if staff.role == "CLINICIAN":
+        raise HTTPException(409, "A clinician assignment cannot be removed after it is set")
     row = db.query(StaffPatientAssignment).filter(
         StaffPatientAssignment.staff_user_id == user_id,
         StaffPatientAssignment.patient_id == patient_id,
@@ -202,6 +283,8 @@ def set_user_role(
         raise HTTPException(422, "Cannot assign the PATIENT role without linking a patient record")
     if user.role == "PATIENT" and data.role != "PATIENT":
         raise HTTPException(422, "Patient accounts cannot be converted to staff accounts")
+    if user.role == "CLINICIAN" and data.role != "CLINICIAN" and db.query(Patient.id).filter(Patient.assigned_clinician_id == user.id).first():
+        raise HTTPException(409, "This clinician has assigned patients")
     user.role = data.role
     user.updated_at = datetime.now(timezone.utc)
     _audit_change(db, _admin, "set_user_role", {"user_id": str(user_id), "role": data.role})
@@ -220,6 +303,8 @@ def set_user_status(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
+    if user.role == "CLINICIAN" and not data.is_active and db.query(Patient.id).filter(Patient.assigned_clinician_id == user.id).first():
+        raise HTTPException(409, "This clinician has assigned patients")
     user.is_active = data.is_active
     user.updated_at = datetime.now(timezone.utc)
     _audit_change(db, _admin, "set_user_status", {"user_id": str(user_id), "is_active": data.is_active})

@@ -2,7 +2,6 @@ import React, { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 import AppLayout from "../layouts/AppLayout";
 import Login from "../pages/Login";
-import Signup from "../pages/Signup";
 import { PATHS } from "./paths";
 import { ProtectedRoute, LoginRoute, StaffRoute, AdminRoute, HomeRoute } from "./guards";
 
@@ -20,6 +19,7 @@ const AgentRuns = lazy(() => import("../pages/AgentRuns"));
 const UserManagement = lazy(() => import("../pages/UserManagement"));
 const Pathways = lazy(() => import("../pages/Pathways"));
 const MyJourney = lazy(() => import("../pages/MyJourney"));
+const Account = lazy(() => import("../pages/Account"));
 const Forbidden = lazy(() => import("../pages/Forbidden"));
 const NotFound = lazy(() => import("../pages/NotFound"));
 
@@ -33,13 +33,13 @@ export default function AppRoutes() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path={PATHS.login} element={<LoginRoute><Login /></LoginRoute>} />
-        <Route path={PATHS.signup} element={<LoginRoute><Signup /></LoginRoute>} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route element={<HomeRoute />}>
               <Route index element={<Dashboard />} />
             </Route>
             <Route path={PATHS.myJourney} element={<MyJourney />} />
+            <Route path={PATHS.account} element={<Account />} />
             <Route element={<StaffRoute />}>
               <Route path={PATHS.patients} element={<Patients />} />
               <Route path={PATHS.patientDetail} element={<PatientDetail />} />

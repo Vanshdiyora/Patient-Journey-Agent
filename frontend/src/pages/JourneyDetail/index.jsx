@@ -177,10 +177,10 @@ export default function JourneyDetail() {
   };
 
   return <div>
-    <Link className="back-link" to="/journeys"><ArrowLeft size={16} /> Back to journeys</Link>
+    <Link className="back-link" to={`/patients/${j.patient_id}`}><ArrowLeft size={16} /> Back to patient</Link>
     <PageHeading
-      eyebrow="Journey execution"
-      title={`#${String(j.id).slice(0, 12)}`}
+      eyebrow="Care journey"
+      title={j.pathway_name || "Care journey"}
       actions={<>
         <button className="secondary-btn" disabled={!!busy} onClick={() => run("evaluate", () => journeysApi.evaluate(j.id))}>
           <RefreshCw size={16} />{busy === "evaluate" ? "Evaluating…" : "Evaluate"}
@@ -193,6 +193,7 @@ export default function JourneyDetail() {
     <div className="heading-meta" style={{ marginTop: -14, marginBottom: 16 }}>
       <Badge kind="status" value={j.status} />
       <Badge kind="priority" value={j.priority} />
+      <span className="journey-reference">Journey #{String(j.id).slice(0, 8)}</span>
       <span>Started {formatDate(j.started_at, true)}</span>
     </div>
     {message && <AlertBanner tone={messageTone}>{message}</AlertBanner>}

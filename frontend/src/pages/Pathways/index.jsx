@@ -6,17 +6,21 @@ import { getErrorMessage, humanize, toList } from "../../utils";
 import { PageHeading, Panel, ErrorState, EmptyState, Badge, Select, Pagination } from "../../components";
 import { useToast } from "../../context/ToastContext";
 import PathwayEditDrawer from "./PathwayEditDrawer";
+import DurationInput from "../../components/DurationInput";
+import { formatDurationHours, milestoneLabel } from "../../utils/duration";
 
 const newStep = (index) => ({
+  key: crypto.randomUUID(),
   code: `STEP-${index + 1}`,
   name: "",
   description: "",
   step_type: "FOLLOWUP",
   owner_role: "CARE_COORDINATOR",
   time_limit_hours: 24,
+  due_after_days: index + 1,
 });
 
-const OWNER_ROLES = ["PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "STAFF", "AGENT"];
+const OWNER_ROLES = ["PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "AGENT"];
 const OWNER_ROLE_OPTIONS = OWNER_ROLES.map(role => ({ value: role, label: humanize(role) }));
 
 export default function Pathways() {
@@ -51,13 +55,14 @@ export default function Pathways() {
         name: form.name.trim(),
         description: form.description.trim() || null,
         steps: form.steps.map((step, index) => ({
-          ...step,
           code: step.code.trim(),
           name: step.name.trim(),
           description: step.description.trim() || null,
           step_type: step.step_type.trim(),
+          owner_role: step.owner_role,
           sequence_number: index + 1,
           time_limit_hours: Number(step.time_limit_hours),
+          due_after_days: Number(step.due_after_days),
         })),
       });
       setForm({ code: "", name: "", description: "", steps: [newStep(0)] });
@@ -74,7 +79,7 @@ export default function Pathways() {
     <PageHeading
       eyebrow="Administrator tools"
       title="Care pathways"
-      description="Create reusable pathways with ordered steps and a time limit for each step."
+      description="Create reusable pathways with milestone days and a clear time allowance for each step."
     />
 
     <Panel wide title="Create a pathway" subtitle="New pathways become active and can be assigned to patients immediately.">
@@ -92,7 +97,7 @@ export default function Pathways() {
         </div>
 
         <div className="pathway-steps-heading">
-          <div><strong>Pathway steps</strong><span>Each timer begins when its step becomes ready.</span></div>
+          <div><strong>Pathway steps</strong><span>Set when each milestone is expected and how long a ready step may take.</span></div>
           <button
             className="secondary-btn"
             type="button"
@@ -101,14 +106,14 @@ export default function Pathways() {
               const codes = new Set(current.steps.map(step => step.code));
               let suffix = current.steps.length + 1;
               while (codes.has(`STEP-${suffix}`)) suffix += 1;
-              return { ...current, steps: [...current.steps, { ...newStep(current.steps.length), code: `STEP-${suffix}` }] };
+              return { ...current, steps: [...current.steps, { ...newStep(current.steps.length), due_after_days: Number(current.steps.at(-1)?.due_after_days ?? 0) + 1, code: `STEP-${suffix}` }] };
             })}
           ><Plus size={15} /> Add step</button>
         </div>
 
         <div className="pathway-step-editors">
           {form.steps.map((step, index) => (
-            <section className="pathway-step-editor" key={step.code}>
+            <section className="pathway-step-editor" key={step.key}>
               <div className="pathway-step-editor-heading">
                 <strong>Step {index + 1}</strong>
                 <button className="icon-btn" type="button" aria-label={`Remove step ${index + 1}`} disabled={busy || form.steps.length === 1} onClick={() => setForm(current => ({ ...current, steps: current.steps.filter((_, i) => i !== index) }))}>
@@ -135,9 +140,10 @@ export default function Pathways() {
                     className="pathway-owner-select"
                   />
                 </div>
-                <label>Time limit (hours)
-                  <input required type="number" min="1" max="8760" value={step.time_limit_hours} onChange={event => updateStep(index, "time_limit_hours", event.target.value)} />
+                <label>Target day from journey start
+                  <input required type="number" min="0" max="365" value={step.due_after_days} onChange={event => updateStep(index, "due_after_days", event.target.value)} />
                 </label>
+                <DurationInput label="Time allowed once ready" hours={step.time_limit_hours} onChange={value => updateStep(index, "time_limit_hours", value)} />
                 <label className="pathway-description-field">Step details
                   <textarea rows="2" maxLength="2000" value={step.description} onChange={event => updateStep(index, "description", event.target.value)} placeholder="What needs to be done?" />
                 </label>
@@ -166,8 +172,8 @@ export default function Pathways() {
                 <ol className="pathway-list-steps">
                   {(pathway.steps || []).map(step => (
                     <li key={step.id}>
-                      <span><strong>{step.sequence_number}. {step.name}</strong><small>{step.description || humanize(step.step_type)}{step.required ? " · Required" : " · Optional"} · Owner: {humanize(step.owner_role || "STAFF")}</small></span>
-                      <span>{step.time_limit_hours} hours</span>
+                      <span><strong>{step.sequence_number}. {step.name}</strong><small>{step.description || humanize(step.step_type)}{step.required ? " · Required" : " · Optional"} · Owner: {humanize(step.owner_role || "CLINICIAN")}</small></span>
+                      <span>{milestoneLabel(step.due_after_days)} · {formatDurationHours(step.time_limit_hours)} allowed</span>
                     </li>
                   ))}
                 </ol>

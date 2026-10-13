@@ -1,5 +1,5 @@
 """Email/password authentication backed by bcrypt hashes in PostgreSQL."""
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Annotated, Any
 from uuid import UUID
@@ -9,13 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.passwords import hash_password, verify_password
-from app.models.patient import Patient
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -33,29 +31,13 @@ class LoginRequest(BaseModel):
         return normalize_account_email(value)
 
 
-class SignupRequest(BaseModel):
-    """Public self-service signup creates a patient identity only."""
-    first_name: str = Field(min_length=1, max_length=80)
-    last_name: str = Field(min_length=1, max_length=80)
-    email: str
-    role: str = Field(min_length=2, max_length=20)
-    password: str = Field(min_length=8, max_length=128)
-    # Required only when role == PATIENT (patients.date_of_birth is NOT NULL).
-    date_of_birth: date | None = None
-    gender: str | None = Field(default=None, max_length=30)
-
-    @field_validator("email", mode="before")
-    @classmethod
-    def validate_signup_email(cls, value: Any) -> str:
-        return normalize_account_email(value)
-
-    @field_validator("first_name", "last_name", "gender", mode="before")
-    @classmethod
-    def strip_text(cls, value: Any) -> Any:
-        return value.strip() if isinstance(value, str) else value
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class UserResponse(BaseModel):
+    id: UUID
     email: str
     name: str
     role: str
@@ -89,6 +71,7 @@ def normalize_account_email(value: Any) -> str:
 
 def user_response(user: User) -> dict[str, Any]:
     return {
+        "id": str(user.id),
         "email": user.email,
         "name": user.display_name or user.email.split("@")[0].replace(".", " ").title(),
         "role": user.role,
@@ -169,78 +152,13 @@ def me(user: Annotated[User, Depends(current_user)]):
     return user_response(user)
 
 
-VALID_SIGNUP_ROLES = ("PATIENT",)
-
-
-def _signup_error(status_code: int, detail: str) -> HTTPException:
-    return HTTPException(status_code=status_code, detail=detail)
-
-
-@router.post("/signup", status_code=201)
-def signup(body: SignupRequest, db: Session = Depends(get_db)):
-    """
-    Create an application account. PATIENT signups also create the linked
-    patient record (DOB + gender required). The response matches /auth/login
-    so the UI can sign the new user straight in.
-    """
-    role = body.role.strip().upper()
-    if role not in VALID_SIGNUP_ROLES:
-        raise _signup_error(422, f"Role must be one of: {', '.join(VALID_SIGNUP_ROLES)}")
-
-    if role == "PATIENT":
-        if not body.date_of_birth:
-            raise _signup_error(422, "Date of birth is required for patient accounts")
-        if body.date_of_birth > date.today():
-            raise _signup_error(422, "Date of birth cannot be in the future")
-        if not body.gender or not body.gender.strip():
-            raise _signup_error(422, "Gender is required for patient accounts")
-
-    email = body.email.strip().lower()
-    if db.query(User).filter(User.email == email).first():
-        raise _signup_error(409, "An account with this email already exists")
-    if role == "PATIENT" and db.query(Patient).filter(Patient.email == email).first():
-        raise _signup_error(409, "A patient record with this email already exists")
-
-    from uuid import uuid4
-
-    now = datetime.now(timezone.utc)
-    patient_id = None
-    if role == "PATIENT":
-        patient_id = uuid4()
-        db.add(Patient(
-            id=patient_id,
-            patient_reference=f"WEB-{now.strftime('%Y')}-{uuid4().hex[:8].upper()}",
-            first_name=body.first_name,
-            last_name=body.last_name,
-            email=email,
-            date_of_birth=body.date_of_birth,
-            gender=body.gender.strip(),
-            created_at=now,
-            updated_at=now,
-        ))
-
-    user = User(
-        id=uuid4(),
-        email=email,
-        password_hash=hash_password(body.password),
-        display_name=f"{body.first_name} {body.last_name}" + (" (Patient)" if role == "PATIENT" else ""),
-        role=role,
-        patient_id=patient_id,
-        is_active=True,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        # Race on the unique email index between the check above and commit.
-        db.rollback()
-        raise _signup_error(409, "An account with this email already exists")
-    db.refresh(user)
-
-    return {
-        "access_token": create_token(user),
-        "token_type": "bearer",
-        "user": user_response(user),
-    }
+@router.post("/change-password")
+def change_password(body: PasswordChangeRequest, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, "Current password is incorrect")
+    if body.current_password == body.new_password:
+        raise HTTPException(422, "Choose a different password")
+    user.password_hash = hash_password(body.new_password)
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Password changed"}

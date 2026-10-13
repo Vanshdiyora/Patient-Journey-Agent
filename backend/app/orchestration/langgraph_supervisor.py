@@ -289,7 +289,7 @@ class SupervisorGraph:
         if not row or not journey:
             return False, "The step was not found on this journey."
         step, template = row
-        owner = step.owner_role or template.owner_role or "STAFF"
+        owner = step.owner_role or template.owner_role or "CLINICIAN"
         if owner != "AGENT":
             return False, f"This step is owned by {owner.replace('_', ' ').lower()}, so only they can complete it; the action was sent as support."
         if step.status not in {"READY", "IN_PROGRESS"}:

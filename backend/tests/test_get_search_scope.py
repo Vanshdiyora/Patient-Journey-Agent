@@ -52,7 +52,7 @@ class GetSearchScopeTest(unittest.TestCase):
                                  db=self.db, user=self.admin)
         found = tool_search_patients(self.db, self.admin, {"query": "shreya desai"})
         self.assertEqual(page["total"], 1)
-        self.assertEqual(page["items"][0].id, target.id)
+        self.assertEqual(page["items"][0]["id"], str(target.id))
         self.assertEqual(found["data"]["total"], 1)
         self.assertEqual(found["data"]["patients"][0]["id"], str(target.id))
 

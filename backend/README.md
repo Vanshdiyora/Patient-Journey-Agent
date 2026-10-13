@@ -25,7 +25,7 @@ backend/
     main.py             FastAPI entry point
     api/v1/              Versioned HTTP endpoints
     api/ws_chat.py       WebSocket endpoint
-    auth.py              Login, signup, and token helpers
+    auth.py              Login, password changes, and token helpers
     core/                Settings, database session, and authorization
     models/              SQLAlchemy tables, one file per table group
     schemas/             Request and response models by resource
@@ -72,9 +72,10 @@ active users. Each patient has a linked portal account. Step time limits are
 backfilled by the migrations. All demo passwords are `Test@123`, stored as
 bcrypt hashes. Hash generation can take several minutes.
 
-The `staff_patient_assignments` table intentionally starts empty. An administrator
-must grant access to individual patients in User management before clinicians or
-care coordinators can see them.
+The setup assigns demo patients to their clinicians. Clinicians can browse the
+basic patient directory and claim an unassigned patient; they can open profiles
+and journeys only for patients assigned to them. Care coordinators see only
+patients granted to them in User management.
 
 Schema creation, migrations, seeding, and verification share one transaction;
 any failure rolls back the entire setup. The command refuses databases with
@@ -159,22 +160,28 @@ from the right-side drawer in **Care pathways**. Saving an edit creates a new
 active version and makes the previous version inactive. Existing patient
 journeys keep their original pathway and steps; future journeys use the new
 version. Retained steps carry their dependencies and action rules forward.
-Each ordered step has a code, name, type, details, and time limit in hours.
+Each ordered step has a code, name, type, details, a target day measured from
+journey start, and a time allowance that begins when the step is ready. The UI
+accepts hours, days, or weeks while the API stores the allowance in hours.
 Administrators also select a responsible role for every step: patient,
-clinician, care coordinator, administrator, general staff, or agent. Steps
+clinician, care coordinator, administrator, or agent. Steps
 created in the create form are required. Editors can change whether a step is
 required. Only administrators can create or edit pathway templates.
 
-Staff can open **Patients → patient profile → Start a care journey**, select an
-active pathway and priority, review or override each step's time limit for
-that patient, then submit. The backend creates the journey and a snapshot of
+An administrator or the assigned clinician can open **Patients → patient profile → Start a care journey**
+and select an active pathway. Clinicians set priority when starting care.
+Administrators have no priority control; the server starts their journeys at
+`MEDIUM` until the assigned clinician changes it. Care coordinators cannot
+start journeys. The person starting care can review or override each step's
+time limit for that patient, then submit. The backend creates the journey and a snapshot of
 its pathway steps and limits together. A step's timer starts when the step
-first becomes `READY`; later steps receive their due date only when they
-become ready. Staff can adjust an unfinished step's time limit from the staff
-journey detail page. The patient sees the pathway name, step details, time
-limits, due dates and progress on **My Journey**. Staff cannot start another
-active journey for the same patient and pathway until the existing one is
-completed or cancelled.
+first becomes `READY`; later steps receive an action deadline only when they
+become ready. Every step also has a planned milestone date based on the target
+day. Clinical staff can adjust an unfinished step's allowance from the journey
+detail page. The patient sees the pathway name, planned dates, action deadlines,
+and progress on **My Journey**. Clinicians can change an active journey's
+priority. A patient cannot start another journey while one is active or blocked;
+the start action becomes available after completion or cancellation.
 
 On the staff journey detail page, a staff member can mark a `READY` or
 `IN_PROGRESS` step complete after confirming the work was actually done. The
@@ -310,7 +317,8 @@ so step-owner rules, the patient event allowlist and admin guards cannot drift.
 | `get_patient_summary`, `list_journeys`, `get_journey_steps`, `get_journey_events`, `get_pending_tasks` | read | all (patients: own data only) |
 | `list_pathways`, `get_dashboard_summary`, `list_exceptions` | read | staff |
 | `list_users`, `get_chat_audit` | read | admin |
-| `start_pathway`, `orchestrate_journey`, `complete_step`, `update_step_time_limit`, `update_exception` | **mutation** | staff (`complete_step` also honours the step owner's role) |
+| `start_pathway` | **mutation** | assigned clinician |
+| `orchestrate_journey`, `complete_step`, `update_step_time_limit`, `update_exception` | **mutation** | staff (`complete_step` also honours the step owner's role) |
 | `submit_event` | **mutation** | all (patients limited to patient event types, own journeys) |
 | `submit_step_update` | **mutation** | patient |
 | `set_user_role`, `set_user_status`, `create_pathway` | **mutation** | admin (cannot change own role/status from chat) |
@@ -337,10 +345,15 @@ so step-owner rules, the patient event allowlist and admin guards cannot drift.
    provider or execution errors return a generic message without secrets.
 4. Expired proposals never execute; the user is told to ask again.
 
-Public signup is limited to patient accounts. Administrators create staff via
-`POST /api/v1/admin/users` or User management, and grant or remove a patient's
-access with `PUT` / `DELETE /api/v1/admin/users/{user_id}/patients/{patient_id}`.
-Staff start with no patient grants. Confirmations are signed for the user,
+Public signup is disabled. Administrators create patients with an optional clinician via
+`POST /api/v1/admin/patients`; the temporary password appears once in the response.
+Patients change it through `POST /api/v1/auth/change-password`. Administrators
+create staff via `POST /api/v1/admin/users`. Existing patients can be assigned
+to a clinician with `PUT /api/v1/admin/users/{user_id}/patients/{patient_id}`;
+clinicians can also claim an unassigned patient with `POST /api/v1/patients/{patient_id}/claim`.
+The clinician directory shows all patients, while profile and journey access
+stays limited to assigned patients. Clinician assignments cannot be removed or changed. The assigned clinician
+starts journeys and chooses priority. Confirmations are signed for the user,
 session, exact action, patient, and parameters. The backend claims each proposal
 once and checks current role, patient grants, and business rules at execution.
 
@@ -409,10 +422,11 @@ Search and filter parameters apply to the full set of records the caller may acc
 - `POST /api/v1/pathways` (create an active pathway and ordered steps)
 - `PUT /api/v1/pathways/{pathway_id}` (create an active edited version)
 - `GET /api/v1/journeys/available-pathways` (staff)
-- `POST /api/v1/patients/{patient_id}/journeys` (staff; pathway, priority, optional per-step time limits)
+- `POST /api/v1/patients/{patient_id}/journeys` (administrator or assigned clinician; clinicians supply priority, administrators omit it; optional per-step time allowances)
 - `GET /api/v1/me/journeys` (signed-in patient)
 - `GET /api/v1/journeys`
 - `GET /api/v1/journeys/{journey_id}`
+- `PATCH /api/v1/journeys/{journey_id}/priority` (assigned clinician; active or blocked journeys)
 - `GET /api/v1/journeys/{journey_id}/steps`
 - `POST /api/v1/journeys/{journey_id}/steps/{step_id}/complete` (staff confirmation)
 - `PATCH /api/v1/journeys/{journey_id}/steps/{step_id}/time-limit`

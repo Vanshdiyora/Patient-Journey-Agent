@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.auth import SignupRequest, signup
+from app.auth import router as auth_router
 from app.api.v1.admin import RoleUpdate, assign_patient, set_user_role, unassign_patient
 from app.core.authorization import get_journey_scoped, scope_patient_ids
 from app.llm.tools import ToolValidationError, execute_tool, get_spec, prepare_arguments, tools_for_llm
@@ -50,16 +50,13 @@ class AssignedPatientScopeTest(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
-    def test_staff_access_is_denied_until_assigned_and_revoked_immediately(self):
+    def test_clinician_access_is_denied_until_assigned(self):
         self.assertEqual(scope_patient_ids(self.db, self.staff), [])
         self.assertEqual(tool_list_patients(self.db, self.staff, {})["data"]["total"], 0)
         with self.assertRaises(HTTPException) as caught:
             get_journey_scoped(self.journeys[0].id, self.db, self.staff)
         self.assertEqual(caught.exception.status_code, 404)
-        grant = StaffPatientAssignment(staff_user_id=self.staff.id,
-                                        patient_id=self.patients[0].id,
-                                        assigned_by_user_id=self.admin.id)
-        self.db.add(grant)
+        self.patients[0].assigned_clinician_id = self.staff.id
         self.db.commit()
         self.assertEqual(scope_patient_ids(self.db, self.staff), [self.patients[0].id])
         self.assertEqual(tool_list_patients(self.db, self.staff, {})["data"]["total"], 1)
@@ -67,7 +64,7 @@ class AssignedPatientScopeTest(unittest.TestCase):
                          self.journeys[0].id)
         with self.assertRaises(HTTPException):
             get_journey_scoped(self.journeys[1].id, self.db, self.staff)
-        self.db.delete(grant)
+        self.patients[0].assigned_clinician_id = None
         self.db.commit()
         with self.assertRaises(HTTPException):
             get_journey_scoped(self.journeys[0].id, self.db, self.staff)
@@ -82,12 +79,8 @@ class AssignedPatientScopeTest(unittest.TestCase):
                          {"journey_id": str(self.journeys[0].id)})
         self.assertEqual(caught.exception.status_code, 404)
 
-    def test_public_signup_cannot_create_staff(self):
-        body = SignupRequest(first_name="Fake", last_name="Admin", email="fake@test.test",
-                             role="ADMIN", password="password123")
-        with self.assertRaises(HTTPException) as caught:
-            signup(body, self.db)
-        self.assertEqual(caught.exception.status_code, 422)
+    def test_public_signup_route_is_removed(self):
+        self.assertNotIn("/auth/signup", {route.path for route in auth_router.routes})
 
     def test_patient_account_cannot_be_promoted_to_staff(self):
         now = datetime.now(timezone.utc)
@@ -120,16 +113,17 @@ class AssignedPatientScopeTest(unittest.TestCase):
                             for t in tools_for_llm(self.staff)))
 
     @patch("app.api.v1.admin._audit_change")
-    def test_admin_grants_and_removes_patient_access(self, record_audit):
+    def test_admin_assigns_clinician_once(self, record_audit):
         patient_id = self.patients[0].id
         assign_patient(self.staff.id, patient_id, self.db, self.admin)
         self.assertEqual(scope_patient_ids(self.db, self.staff), [patient_id])
         assign_patient(self.staff.id, patient_id, self.db, self.admin)
         self.assertEqual(scope_patient_ids(self.db, self.staff), [patient_id])
-        unassign_patient(self.staff.id, patient_id, self.db, self.admin)
-        self.assertEqual(scope_patient_ids(self.db, self.staff), [])
+        with self.assertRaises(HTTPException) as caught:
+            unassign_patient(self.staff.id, patient_id, self.db, self.admin)
+        self.assertEqual(caught.exception.status_code, 409)
         self.assertEqual([call.args[2] for call in record_audit.call_args_list],
-                         ["assign_patient", "unassign_patient"])
+                         ["assign_patient"])
 
 
 class ConfirmationBindingTest(unittest.TestCase):

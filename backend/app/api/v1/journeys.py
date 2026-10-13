@@ -19,7 +19,7 @@ from app.core.authorization import (
 )
 from app.models import Journey, JourneyStep, Patient, PatientEvent, Pathway, PathwayStep
 from app.schemas import JourneyResponse, JourneyStepResponse, OrchestrationResponse
-from app.schemas.journey import JourneyStepComplete, JourneyStepTimeLimitUpdate
+from app.schemas.journey import JourneyPriorityUpdate, JourneyStepComplete, JourneyStepTimeLimitUpdate
 from app.orchestration.journey_engine import JourneyEngine
 from app.orchestration.event_processor import EventProcessor
 from app.orchestration.langgraph_supervisor import OrchestrationFailure, SupervisorGraph
@@ -147,6 +147,7 @@ def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff
                  "owner_role": step.owner_role,
                  "sequence_number": step.sequence_number,
                  "time_limit_hours": step.time_limit_hours,
+                 "due_after_days": step.due_after_days,
              }
              for step in db.query(PathwayStep)
              .filter(PathwayStep.pathway_id == pathway.id)
@@ -158,8 +159,10 @@ def available_pathways(db: Session = Depends(get_db), user=Depends(require_staff
 
 
 def _check_step_completion_permission(db, journey, step, pathway_step, user):
-    owner_role = str(step.owner_role or pathway_step.owner_role or "STAFF").upper()
+    owner_role = str(step.owner_role or pathway_step.owner_role or "CLINICIAN").upper()
     if owner_role == "PATIENT":
+        if user.role != "CLINICIAN":
+            raise HTTPException(403, "The assigned clinician must review patient submissions")
         pending_submission = (
             db.query(PatientEvent)
             .filter(
@@ -178,18 +181,38 @@ def _check_step_completion_permission(db, journey, step, pathway_step, user):
         "CLINICIAN": {"CLINICIAN"},
         "CARE_COORDINATOR": {"CARE_COORDINATOR"},
         "ADMIN": {"ADMIN"},
-        "STAFF": STAFF_ROLES,
     }
     if owner_role == "AGENT":
         raise HTTPException(409, "Agent-owned steps are completed only after a verified agent action.")
     if str(user.role).upper() not in allowed_roles.get(owner_role, set()):
-        raise HTTPException(403, f"This step is assigned to {owner_role.lower().replace('_', ' ')} staff.")
+        raise HTTPException(403, f"This step is assigned to the {owner_role.lower().replace('_', ' ')} role.")
     return owner_role
 
 
 @router.get("/journeys/{journey_id}", response_model=JourneyResponse)
 def get_journey(journey_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
     journey = get_journey_scoped(journey_id, db, user)
+    return journeys_with_pathways(db, [journey])[0]
+
+
+@router.patch("/journeys/{journey_id}/priority", response_model=JourneyResponse)
+def update_journey_priority(
+    journey_id: UUID,
+    data: JourneyPriorityUpdate,
+    db: Session = Depends(get_db),
+    user=Depends(require_staff),
+):
+    if user.role != "CLINICIAN":
+        raise HTTPException(403, "Only the assigned clinician can change journey priority")
+    journey = db.query(Journey).filter(Journey.id == journey_id).with_for_update().first()
+    if journey is None or not can_read_journey(db, user, journey):
+        raise HTTPException(404, "Journey not found")
+    if journey.status not in {"ACTIVE", "BLOCKED"}:
+        raise HTTPException(409, "Priority can only be changed for an active care journey")
+    journey.priority = data.priority
+    journey.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(journey)
     return journeys_with_pathways(db, [journey])[0]
 
 
@@ -367,15 +390,14 @@ def add_step_evidence(
     if evidence_type == "APPROVAL" and not approval_confirmed:
         raise HTTPException(422, "Confirm that the required approval has actually been received.")
 
-    owner_role = str(step.owner_role or pathway_step.owner_role or "STAFF").upper()
+    owner_role = str(step.owner_role or pathway_step.owner_role or "CLINICIAN").upper()
     allowed_roles = {
         "CLINICIAN": {"CLINICIAN"},
         "CARE_COORDINATOR": {"CARE_COORDINATOR"},
         "ADMIN": {"ADMIN"},
-        "STAFF": STAFF_ROLES,
     }
     if str(user.role).upper() not in allowed_roles.get(owner_role, set()):
-        raise HTTPException(403, f"This step is assigned to {owner_role.lower().replace('_', ' ')} staff.")
+        raise HTTPException(403, f"This step is assigned to the {owner_role.lower().replace('_', ' ')} role.")
 
     file_id = None
     file_name = None

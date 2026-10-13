@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-STEP_OWNER_ROLES = {"PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "AGENT", "STAFF"}
+STEP_OWNER_ROLES = {"PATIENT", "CLINICIAN", "CARE_COORDINATOR", "ADMIN", "AGENT"}
 
 
 class PathwayStepCreate(BaseModel):
@@ -14,6 +14,7 @@ class PathwayStepCreate(BaseModel):
     step_type: str = Field(min_length=1, max_length=50)
     owner_role: str = "CARE_COORDINATOR"
     time_limit_hours: int = Field(ge=1, le=8760)
+    due_after_days: int | None = Field(default=None, ge=0, le=365)
     completion_criteria: dict[str, Any] | None = None
 
     @field_validator("code")

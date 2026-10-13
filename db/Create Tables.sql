@@ -207,7 +207,7 @@ CREATE TABLE pathway_steps (
 
     required BOOLEAN NOT NULL DEFAULT TRUE,
 
-    owner_role VARCHAR(30) NOT NULL DEFAULT 'STAFF',
+    owner_role VARCHAR(30) NOT NULL DEFAULT 'CLINICIAN',
 
     due_after_days INTEGER,
 
@@ -237,7 +237,7 @@ CREATE TABLE pathway_steps (
         ),
 
     CONSTRAINT chk_pathway_step_owner_role
-        CHECK (owner_role IN ('PATIENT', 'CLINICIAN', 'CARE_COORDINATOR', 'ADMIN', 'STAFF', 'AGENT')),
+        CHECK (owner_role IN ('PATIENT', 'CLINICIAN', 'CARE_COORDINATOR', 'ADMIN', 'AGENT')),
 
     CONSTRAINT chk_pathway_step_time_limit_hours
         CHECK (time_limit_hours IS NULL OR time_limit_hours BETWEEN 1 AND 8760)
@@ -346,7 +346,7 @@ CREATE TABLE journey_steps (
 
     status journey_step_status NOT NULL DEFAULT 'PENDING',
 
-    owner_role VARCHAR(30) NOT NULL DEFAULT 'STAFF',
+    owner_role VARCHAR(30) NOT NULL DEFAULT 'CLINICIAN',
 
     time_limit_hours INTEGER,
 
@@ -381,7 +381,7 @@ CREATE TABLE journey_steps (
         ),
 
     CONSTRAINT chk_journey_step_owner_role
-        CHECK (owner_role IN ('PATIENT', 'CLINICIAN', 'CARE_COORDINATOR', 'ADMIN', 'STAFF', 'AGENT')),
+        CHECK (owner_role IN ('PATIENT', 'CLINICIAN', 'CARE_COORDINATOR', 'ADMIN', 'AGENT')),
 
     CONSTRAINT chk_journey_step_time_limit_hours
         CHECK (time_limit_hours IS NULL OR time_limit_hours BETWEEN 1 AND 8760)
@@ -748,6 +748,10 @@ CREATE INDEX idx_users_role
 
 CREATE INDEX idx_users_active
     ON users(is_active);
+
+-- One responsible clinician per patient; a clinician may have many patients.
+ALTER TABLE patients ADD COLUMN assigned_clinician_id UUID REFERENCES users(id);
+CREATE INDEX idx_patients_assigned_clinician_id ON patients(assigned_clinician_id);
 
 -- Staff patient grants; no grant means no patient access for clinical staff.
 CREATE TABLE staff_patient_assignments (

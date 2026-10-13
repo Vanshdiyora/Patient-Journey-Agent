@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ShieldCheck, UserCog } from "lucide-react";
+import React, { useCallback, useState } from "react";
+import { Plus, ShieldCheck, UserCog } from "lucide-react";
 import { adminApi, patientsApi } from "../services";
 import { useAsync } from "../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../utils";
@@ -7,16 +7,19 @@ import { useConfirm } from "../components/ConfirmModal";
 import { useToast } from "../context/ToastContext";
 import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner, Select, Pagination } from "../components";
 import { ROLES } from "../utils/roles";
+import StaffCreateDrawer from "./StaffCreateDrawer";
 
 export default function UserManagement() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [offset, setOffset] = useState(0);
-  const { data, loading, error } = useAsync(() => adminApi.users({ limit: 10, offset }), [refreshKey, offset]);
+  const [userSearch, setUserSearch] = useState("");
+  const { data, loading, error } = useAsync(() => adminApi.users({ limit: 10, offset, search: userSearch || undefined }), [refreshKey, offset, userSearch]);
   const users = toList(data, "items", "users");
   const [saving, setSaving] = useState("");
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [patientSearch, setPatientSearch] = useState("");
-  const [staffForm, setStaffForm] = useState({ email: "", display_name: "", password: "", role: ROLES.CLINICIAN });
+  const [staffDrawerOpen, setStaffDrawerOpen] = useState(false);
+  const closeStaffDrawer = useCallback(() => setStaffDrawerOpen(false), []);
   const [assignmentRefresh, setAssignmentRefresh] = useState(0);
   const { data: assignments, loading: assignmentsLoading } = useAsync(
     () => selectedStaff ? adminApi.patientAssignments(selectedStaff.id) : Promise.resolve({ patient_ids: [] }),
@@ -77,19 +80,11 @@ export default function UserManagement() {
     } setSaving("");
   };
 
-  const createStaff = async (event) => {
-    event.preventDefault();
-    setSaving("create");
-    try {
-      await adminApi.createStaff(staffForm);
-      setStaffForm({ email: "", display_name: "", password: "", role: ROLES.CLINICIAN });
-      setRefreshKey(k => k + 1);
-      toast.success("Staff account created.");
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    } finally {
-      setSaving("");
-    }
+  const staffCreated = () => {
+    setStaffDrawerOpen(false);
+    setOffset(0);
+    setRefreshKey(k => k + 1);
+    toast.success("Staff account created.");
   };
 
   const changeAssignment = async (patientId, assign) => {
@@ -122,8 +117,11 @@ export default function UserManagement() {
       eyebrow="Administration"
       title="User management"
       description="Manage application identities, roles and activation status."
+      actions={<button className="primary-btn" type="button" onClick={() => setStaffDrawerOpen(true)}><Plus size={16} /> Create staff account</button>}
     />
+    {staffDrawerOpen && <StaffCreateDrawer onClose={closeStaffDrawer} onCreated={staffCreated} />}
     <Panel title="Application users" subtitle={`${data?.total ?? users.length} registered identities`} headerIcon={UserCog}>
+      <div style={{ padding: 18 }}><label>Find a user<input value={userSearch} onChange={event => { setUserSearch(event.target.value); setOffset(0); }} placeholder="Search doctor name or email" /></label></div>
       {feedback && <div style={{ padding: "0 18px" }}><AlertBanner tone={feedback.tone}>{feedback.text}</AlertBanner></div>}
       {error ? <ErrorState error={error} title="Could not load users" /> :
         loading ? <SkeletonRows /> :
@@ -160,28 +158,18 @@ export default function UserManagement() {
           ) : <EmptyState icon={ShieldCheck} title="No users" text="No identities are registered yet." />}
       {!loading && !error && <Pagination offset={offset} count={users.length} total={data?.total ?? 0} onPage={setOffset} />}
     </Panel>
-    <Panel title="Create staff account" subtitle="Only administrators can provision staff identities.">
-      <form onSubmit={createStaff} className="form-stack" style={{ padding: 18 }}>
-        <label>Name<input required maxLength={200} value={staffForm.display_name} onChange={e => setStaffForm(f => ({ ...f, display_name: e.target.value }))} /></label>
-        <label>Email<input required type="email" value={staffForm.email} onChange={e => setStaffForm(f => ({ ...f, email: e.target.value }))} /></label>
-        <label>Initial password<input required type="password" minLength={8} maxLength={128} value={staffForm.password} onChange={e => setStaffForm(f => ({ ...f, password: e.target.value }))} /></label>
-        <label>Role<Select value={staffForm.role} onChange={role => setStaffForm(f => ({ ...f, role }))}
-          options={[ROLES.CLINICIAN, ROLES.CARE_COORDINATOR, ROLES.ADMIN].map(role => ({ value: role, label: humanize(role) }))} /></label>
-        <button className="primary-btn" type="submit" disabled={saving === "create"}>Create account</button>
-      </form>
-    </Panel>
     {selectedStaff && <Panel title={`Patient access: ${selectedStaff.display_name || selectedStaff.email}`} subtitle="Clinical and coordination staff can see only assigned patients.">
       <div style={{ padding: 18 }}>
         <button className="secondary-btn" onClick={() => setSelectedStaff(null)}>Close</button>
         <p>Assigned patients</p>
         {assignmentsLoading ? <SkeletonRows /> : (assignments?.patients || []).length ? (
-          <ul>{assignments.patients.map(patient => <li key={patient.id}>{patient.name} ({patient.reference}) <button className="secondary-btn" disabled={saving === patient.id} onClick={() => changeAssignment(patient.id, false)}>Remove access</button></li>)}</ul>
+          <ul>{assignments.patients.map(patient => <li key={patient.id}>{patient.name} ({patient.reference}) {selectedStaff.role !== ROLES.CLINICIAN && <button className="secondary-btn" disabled={saving === patient.id} onClick={() => changeAssignment(patient.id, false)}>Remove access</button>}</li>)}</ul>
         ) : <p>No patients assigned.</p>}
         <label>Find a patient to assign<input value={patientSearch} onChange={e => setPatientSearch(e.target.value)} placeholder="Search name or reference" /></label>
         {patientSearch.trim() && <ul>{toList(matchingPatients, "items", "patients").map(patient => (
           <li key={patient.id}>{patient.first_name} {patient.last_name} ({patient.patient_reference}){" "}
-            <button className="secondary-btn" disabled={saving === patient.id || (assignments?.patient_ids || []).includes(patient.id)} onClick={() => changeAssignment(patient.id, true)}>
-              {(assignments?.patient_ids || []).includes(patient.id) ? "Assigned" : "Grant access"}
+            <button className="secondary-btn" disabled={saving === patient.id || (assignments?.patient_ids || []).includes(patient.id) || (selectedStaff.role === ROLES.CLINICIAN && Boolean(patient.assigned_clinician_id))} onClick={() => changeAssignment(patient.id, true)}>
+              {(assignments?.patient_ids || []).includes(patient.id) ? "Assigned" : selectedStaff.role === ROLES.CLINICIAN && patient.assigned_clinician_id ? "Already assigned to a doctor" : "Grant access"}
             </button>
           </li>
         ))}</ul>}

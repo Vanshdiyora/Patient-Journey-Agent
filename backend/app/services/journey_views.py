@@ -1,4 +1,5 @@
 """Journey read models shared by staff and patient endpoints."""
+from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app.models import Journey, JourneyStep, Pathway, PathwayStep, PatientEvent
@@ -47,8 +48,10 @@ def steps_with_pathway_details(db: Session, journey_id) -> list[dict]:
             "name": template.name,
             "description": template.description,
             "sequence_number": template.sequence_number,
-            "owner_role": step.owner_role or template.owner_role or "STAFF",
+            "owner_role": step.owner_role or template.owner_role or "CLINICIAN",
             "time_limit_hours": step.time_limit_hours,
+            "due_after_days": template.due_after_days,
+            "planned_due_at": journey.started_at + timedelta(days=template.due_after_days) if template.due_after_days is not None else None,
             "patient_submission_pending": str(step.id) in pending_step_ids,
         }
         for step, template in rows

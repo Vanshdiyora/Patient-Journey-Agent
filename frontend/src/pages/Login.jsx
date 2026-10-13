@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2, LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Brand from "../components/Brand";
@@ -71,7 +70,7 @@ export default function Login() {
             </button>
           </form>
           <div className="secure-note"><ShieldCheck size={17} /><span>Identity is verified by the CarePath backend.</span></div>
-          <p className="login-switch">New to CarePath? <Link to="/signup" className="text-link">Create an account</Link></p>
+          <p className="login-switch">Patient accounts are created by an administrator. Ask your care team for your sign-in details.</p>
         </div>
       </div>
     </div>

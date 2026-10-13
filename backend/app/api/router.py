@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.core.dependencies import get_current_user
+from app.auth import UserResponse, user_response
 from app.api.v1 import health, patients, journeys, events, exceptions, agents, actions, dashboard, me, admin, pathways
 from app.api.v1.chat import router as chat_router
 from app.auth import router as auth_router
@@ -18,11 +19,7 @@ api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(dashboard.router, tags=["dashboard"])
 api_router.include_router(chat_router, tags=["chat"])
 
-@api_router.get("/users/me")
+@api_router.get("/users/me", response_model=UserResponse)
 def me(user=Depends(get_current_user)):
     # Same shape as the login response so the frontend can treat them identically.
-    return {
-        "email": user.email,
-        "name": user.display_name,
-        "role": user.role,
-    }
+    return user_response(user)

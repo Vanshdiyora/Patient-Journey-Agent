@@ -13,10 +13,16 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models import Journey, JourneyStep, Pathway, PathwayStep
+from app.models import Journey, JourneyStep, Patient, Pathway, PathwayStep
 from app.orchestration.journey_engine import JourneyEngine
 
 ACTIVE_JOURNEY_STATUSES = ("ACTIVE", "BLOCKED")
+
+
+def target_completion_hours(steps: list[PathwayStep], time_limits: dict[UUID, int]) -> int:
+    """Clinical milestone days are measured from journey start, not added per step."""
+    milestone_days = [step.due_after_days for step in steps if step.due_after_days is not None]
+    return max(milestone_days) * 24 if milestone_days else sum(time_limits.values())
 
 
 def get_active_pathway(db: Session, pathway_id: UUID) -> Pathway:
@@ -31,17 +37,12 @@ def get_active_pathway(db: Session, pathway_id: UUID) -> Pathway:
     return pathway
 
 
-def find_active_journey(db: Session, patient_id: UUID, pathway_id: UUID) -> Journey | None:
-    """Existing ACTIVE/BLOCKED journey for this patient + pathway code, across versions."""
-    pathway = db.query(Pathway).filter(Pathway.id == pathway_id).first()
-    if pathway is None:
-        return None
+def find_active_patient_journey(db: Session, patient_id: UUID) -> Journey | None:
+    """An ACTIVE or BLOCKED journey already running for this patient."""
     return (
         db.query(Journey)
-        .join(Pathway, Journey.pathway_id == Pathway.id)
         .filter(
             Journey.patient_id == patient_id,
-            Pathway.code == pathway.code,
             Journey.status.in_(ACTIVE_JOURNEY_STATUSES),
         )
         .first()
@@ -103,7 +104,7 @@ def sync_journey_to_active_pathway(db: Session, journey_id: UUID) -> bool:
             continue
 
         journey_step.pathway_step_id = target_step.id
-        journey_step.owner_role = target_step.owner_role or "STAFF"
+        journey_step.owner_role = target_step.owner_role or "CLINICIAN"
         if source_step.time_limit_hours != target_step.time_limit_hours:
             journey_step.time_limit_hours = (
                 target_step.time_limit_hours
@@ -129,7 +130,7 @@ def sync_journey_to_active_pathway(db: Session, journey_id: UUID) -> bool:
             journey_id=journey.id,
             pathway_step_id=target_step.id,
             status="PENDING",
-            owner_role=target_step.owner_role or "STAFF",
+            owner_role=target_step.owner_role or "CLINICIAN",
             time_limit_hours=time_limit_hours,
             due_at=None,
             started_at=None,
@@ -139,6 +140,10 @@ def sync_journey_to_active_pathway(db: Session, journey_id: UUID) -> bool:
 
     journey.pathway_id = active_pathway.id
     journey.pathway_version = active_pathway.version
+    journey.target_completion_at = journey.started_at + timedelta(hours=target_completion_hours(
+        target_steps,
+        {step.id: step.time_limit_hours or max(step.due_after_days or 1, 1) * 24 for step in target_steps},
+    ))
     journey.updated_at = now
     db.flush()
     JourneyEngine(db).evaluate(journey.id)
@@ -149,7 +154,7 @@ def start_journey_for_patient(
     db: Session,
     patient_id: UUID,
     pathway_id: UUID,
-    priority: str = "MEDIUM",
+    priority: str,
     step_time_limits: dict[UUID, int] | None = None,
 ) -> Journey:
     """
@@ -161,11 +166,15 @@ def start_journey_for_patient(
     transaction.
     """
     overrides = step_time_limits or {}
+    if priority not in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
+        raise HTTPException(422, "Journey priority must be CRITICAL, HIGH, MEDIUM, or LOW")
+    # Serialize starts across REST and chat so a patient cannot gain two active journeys.
+    db.query(Patient.id).filter(Patient.id == patient_id).with_for_update().first()
     pathway = get_active_pathway(db, pathway_id)
 
-    existing = find_active_journey(db, patient_id, pathway.id)
+    existing = find_active_patient_journey(db, patient_id)
     if existing:
-        raise HTTPException(409, "This patient already has an active journey for this pathway")
+        raise HTTPException(409, "This patient already has an active care journey")
 
     templates = pathway_steps(db, pathway.id)
     if not templates:
@@ -184,7 +193,7 @@ def start_journey_for_patient(
         )
         for step in templates
     }
-    total_hours = sum(time_limits.values())
+    total_hours = target_completion_hours(templates, time_limits)
     now = datetime.now(timezone.utc)
     journey = Journey(
         id=uuid4(), patient_id=patient_id, pathway_id=pathway.id,
@@ -198,7 +207,7 @@ def start_journey_for_patient(
         db.add(JourneyStep(
             id=uuid4(), journey_id=journey.id, pathway_step_id=template.id,
             status="PENDING",
-            owner_role=template.owner_role or "STAFF",
+            owner_role=template.owner_role or "CLINICIAN",
             time_limit_hours=time_limits[template.id],
             due_at=None,
             started_at=None,
