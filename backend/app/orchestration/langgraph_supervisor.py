@@ -239,6 +239,7 @@ class SupervisorGraph:
         execution, meta = ActionExecutor(self.db).execute(
             journey_id, UUID(step_id) if step_id else None, decision["action_type"],
             decision.get("payload") or {}, requested_by="SUPERVISOR",
+            allow_agent_self_approval=True,
         )
         completed, note = self._complete_agent_owned_step(journey_id, step_id, execution, meta)
         if completed:

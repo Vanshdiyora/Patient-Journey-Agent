@@ -65,7 +65,8 @@
 .journey-card-arrow{color:#71817c;display:grid;place-items:center}
 .journey-priority-form{display:flex;align-items:flex-end;gap:7px}
 .journey-priority-form label{display:flex;flex-direction:column;gap:3px;font-size:9px;color:#71817c}
-.journey-priority-form select{height:32px;min-width:110px;border:1px solid #dce4e1;border-radius:7px;background:#fff;padding:0 8px;font-size:10px;color:#394c48}
+.journey-priority-form .form-select{width:110px}
+.journey-priority-form .form-select .select-trigger{height:32px;min-height:32px;min-width:110px;border-color:#dce4e1;padding:0 8px;font-size:10px;color:#394c48}
 .journey-priority-form .secondary-btn{height:32px;white-space:nowrap;font-size:10px}
 @media(max-width:760px){.journey-card{flex-wrap:wrap}.journey-priority-form{width:100%;justify-content:flex-end}.start-journey-locked{align-items:flex-start;flex-direction:column}}
 .journey-card-icon{width:36px;height:36px;border-radius:9px;background:#edf6f5;color:var(--teal);display:grid;place-items:center}
@@ -187,12 +188,12 @@
 .event-form-title{font-size:10px;font-weight:700;color:#62716e;display:flex;align-items:center;gap:6px}
 .event-form>label{display:flex;flex-direction:column;gap:5px;font-size:9px;font-weight:600;color:#62716e}
 .event-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.event-form input,.event-form textarea,.event-form select{border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:8px 9px;outline:0;font-size:10px;color:#394b47}
+.event-form input,.event-form textarea{border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:8px 9px;outline:0;font-size:10px;color:#394b47}
 .event-form .select-root{width:100%}
 .event-form .select-trigger{width:100%;height:36px;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:0 10px;font-size:10px;color:#394b47}
 .event-form .select-trigger:focus-visible{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .event-form textarea{font:9px/1.5 ui-monospace,monospace;resize:vertical}
-.event-form input:focus,.event-form textarea:focus,.event-form select:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
+.event-form input:focus,.event-form textarea:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .event-form .primary-btn{align-self:flex-end;height:34px;font-size:10px}
 .event-form-note{margin:0;font-size:9px;color:#899592}
 .event-form-error{display:flex;align-items:center;gap:6px;background:#fff6f6;color:#9c4147;border:1px solid #f0d3d5;border-radius:7px;padding:7px 9px;font-size:10px}
@@ -244,15 +245,18 @@
 .pathway-owner-select,.pathway-owner-select .select-trigger{width:100%}
 .pathway-owner-select .select-trigger{height:36px;min-height:36px;border-color:#e0e6e4;background:#fbfcfc;padding:0 10px;font-size:11px}
 .pathway-owner-select .select-trigger:focus-visible{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
-.pathway-form input:not([type="checkbox"]),.pathway-form textarea,.pathway-form select,.step-time-limit-form input{width:100%;min-height:36px;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:9px 10px;outline:0;font-size:11px;color:#394b47}
-.pathway-form select{cursor:pointer}
+.pathway-form input:not([type="checkbox"]),.pathway-form textarea,.step-time-limit-form input{width:100%;min-height:36px;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:9px 10px;outline:0;font-size:11px;color:#394b47}
 .pathway-form textarea{resize:vertical;line-height:1.5}
-.pathway-form input:focus,.pathway-form textarea:focus,.pathway-form select:focus,.step-time-limit-form input:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
+.pathway-form input:focus,.pathway-form textarea:focus,.step-time-limit-form input:focus{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
+.form-select,.form-select .select-trigger{width:100%}
+.form-select .select-trigger{height:36px;min-height:36px;border-color:#e0e6e4;background:#fbfcfc;padding:0 10px;font-size:11px;color:#394b47}
+.form-select .select-trigger:focus-visible{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .duration-field{display:flex;flex-direction:column;gap:6px;min-width:0}
-.duration-field>label{font-size:10px;font-weight:600;color:#586864}
-.duration-controls{display:flex;gap:6px;min-width:0}
-.duration-controls input{min-width:0;flex:1;width:80px!important}
-.duration-controls select{width:90px!important;flex:none;border:1px solid #e0e6e4;background:#fbfcfc;border-radius:7px;padding:7px 8px;font-size:11px;color:#394b47}
+.duration-field-label{font-size:10px;font-weight:600;color:#586864}
+.duration-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;min-width:0}
+.duration-part{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:9px;font-weight:500;color:#87938f}
+.duration-part input{min-width:0;width:100%!important;min-height:36px;padding:7px 8px!important}
+.duration-part span{text-align:center}
 .pathway-description-field{grid-column:1/-1}
 .pathway-steps-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #edf0f0;padding-bottom:10px}
 .pathway-steps-heading strong,.pathway-steps-heading span{display:block}
@@ -310,11 +314,13 @@
 .journey-step-limit-input small{font-size:9px;color:#87938f}
 .journey-step-limit .duration-field{width:220px;flex:none}
 @media(max-width:560px){.journey-step-limit{align-items:stretch;flex-direction:column}.journey-step-limit .duration-field{width:100%}}
-.step-time-limit-form{display:flex;align-items:flex-end;gap:8px;margin-top:9px}
-.step-time-limit-form label{flex-direction:row;align-items:center;gap:8px}
-.step-time-limit-form input{width:92px;padding:6px 8px}
-.step-time-limit-form .secondary-btn{height:32px;font-size:10px}
+.step-time-limit-form{display:flex;align-items:flex-start;gap:8px;margin-top:9px}
+.step-time-limit-form .duration-field{width:252px;flex:none}
+.step-time-limit-form .duration-part{gap:3px;font-size:9px;font-weight:500;color:#87938f}
+.step-time-limit-form input{padding:6px 8px}
+.step-time-limit-form .secondary-btn{height:32px;font-size:10px;margin-top:18px}
 .step-time-limit-note{font-size:9px;color:#87938f;margin-top:5px}
+@media(max-width:560px){.step-time-limit-form{flex-direction:column;align-items:flex-start}.step-time-limit-form .duration-field{width:min(252px,100%)}.step-time-limit-form .secondary-btn{margin-top:0}}
 .step-complete-btn{height:32px;margin-top:9px;font-size:10px}
 .step-evidence-form{display:flex;flex-direction:column;gap:7px;margin-top:10px;padding:10px;background:#f8fbfa;border:1px solid #e1ebe8;border-radius:8px}
 .step-evidence-form>strong{display:flex;align-items:center;gap:5px;font-size:10px;color:#52615e}

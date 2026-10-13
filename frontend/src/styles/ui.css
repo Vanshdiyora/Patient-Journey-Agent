@@ -98,6 +98,7 @@ code{font:500 10px ui-monospace,SFMono-Regular,Menlo,monospace;color:#5f6f6b;bac
 .select-trigger:hover:not(:disabled){border-color:#c8d2cf;background:#fcfdfd}
 .select-trigger:focus-visible{border-color:#77bdb5;box-shadow:0 0 0 3px #e7f5f2}
 .select-trigger:disabled{opacity:.6;cursor:not-allowed}
+.select-validation-input{position:absolute;left:0;top:0;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none}
 .select-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .select-value--muted{color:#8c9996}
 .select-chevron{flex:none;color:#8c9996;transition:transform .15s}

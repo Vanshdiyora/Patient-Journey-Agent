@@ -4,7 +4,12 @@ from app.core.exceptions import ActionNotAllowedError
 class ActionRegistry:
     def list(self):
         return [
-            {"action_type": d.action_type, "description": d.description, "requires_approval": d.requires_approval}
+            {
+                "action_type": d.action_type,
+                "description": d.description,
+                "requires_approval": d.requires_approval,
+                "agent_may_self_approve": d.agent_may_self_approve,
+            }
             for d in ACTION_DEFINITIONS.values()
         ]
 

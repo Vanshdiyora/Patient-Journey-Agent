@@ -164,9 +164,9 @@ export default function PatientDetail() {
               </Link>
               <Badge kind="status" value={j.status} />
               {isClinician && ACTIVE_JOURNEY_STATUSES.has(j.status) ? <form className="journey-priority-form" onSubmit={event => savePriority(event, j)}>
-                <label>Priority<select value={priorityDrafts[j.id] || j.priority} disabled={prioritySavingId === j.id} onChange={event => setPriorityDrafts(current => ({ ...current, [j.id]: event.target.value }))}>
-                  {PRIORITIES.map(value => <option key={value} value={value}>{humanize(value)}</option>)}
-                </select></label>
+                <label>Priority<Select className="form-select" label={`Priority for ${j.pathway_name || "care journey"}`} value={priorityDrafts[j.id] || j.priority} disabled={prioritySavingId === j.id}
+                  onChange={value => setPriorityDrafts(current => ({ ...current, [j.id]: value }))}
+                  options={PRIORITIES.map(value => ({ value, label: humanize(value) }))} /></label>
                 <button className="secondary-btn" type="submit" disabled={prioritySavingId === j.id || (priorityDrafts[j.id] || j.priority) === j.priority}>{prioritySavingId === j.id ? "Saving…" : "Save priority"}</button>
               </form> : <Badge kind="priority" value={j.priority} />}
               <Link className="journey-card-arrow" to={`/journeys/${j.id}`} aria-label={`Open ${j.pathway_name || "care journey"}`}><ChevronRight size={18} /></Link>

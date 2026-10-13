@@ -1,22 +1,35 @@
 import React, { useId, useState } from "react";
-import { preferredUnit } from "../utils/duration";
+import { durationHoursFromParts, splitDurationHours } from "../utils/duration";
 
-const HOURS_PER_UNIT = { hours: 1, days: 24, weeks: 168 };
+const MAX_DURATION_HOURS = 8760;
 
 export default function DurationInput({ label, hours, onChange, disabled = false, className = "" }) {
   const id = useId();
-  const [unit, setUnit] = useState(() => preferredUnit(hours));
-  const factor = HOURS_PER_UNIT[unit];
-  const amount = hours === "" || hours == null ? "" : Number((Number(hours) / factor).toFixed(2));
+  const [editing, setEditing] = useState(null);
+  const parts = hours === "" || hours == null ? null : splitDurationHours(hours);
+  const updatePart = (part, value) => {
+    setEditing({ part, value });
+    const current = parts || { weeks: 0, days: 0, hours: 0 };
+    const amount = value === "" ? 0 : Math.max(0, Math.floor(Number(value) || 0));
+    const totalHours = durationHoursFromParts({ ...current, [part]: amount });
+    onChange(Math.min(MAX_DURATION_HOURS, totalHours));
+  };
+
   return <div className={`duration-field ${className}`.trim()}>
-    <label htmlFor={id}>{label}</label>
+    <span className="duration-field-label">{label}</span>
     <div className="duration-controls">
-      <input id={id} aria-label={label} type="number" min="0.01" max={8760 / factor} step="any" required
-        value={amount} disabled={disabled}
-        onChange={event => onChange(event.target.value === "" ? "" : Math.max(1, Math.round(Number(event.target.value) * factor)))} />
-      <select aria-label={`${label} unit`} value={unit} disabled={disabled} onChange={event => setUnit(event.target.value)}>
-        <option value="hours">hours</option><option value="days">days</option><option value="weeks">weeks</option>
-      </select>
+      {[
+        ["weeks", 52],
+        ["days", 6],
+        ["hours", 23],
+      ].map(([part, max]) => (
+        <label className="duration-part" htmlFor={`${id}-${part}`} key={part}>
+          <input id={`${id}-${part}`} aria-label={`${label}: ${part}`} type="number" min="0" max={max} step="1"
+            value={editing?.part === part ? editing.value : parts ? parts[part] : ""} disabled={disabled}
+            onChange={event => updatePart(part, event.target.value)} onBlur={() => setEditing(null)} />
+          <span>{part}</span>
+        </label>
+      ))}
     </div>
   </div>;
 }

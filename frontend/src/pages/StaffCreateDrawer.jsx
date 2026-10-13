@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { adminApi } from "../services";
 import { getErrorMessage, humanize } from "../utils";
 import { ROLES } from "../utils/roles";
+import { Select } from "../components";
 
 const emptyForm = { display_name: "", email: "", password: "", role: ROLES.CLINICIAN };
 const staffRoles = [ROLES.CLINICIAN, ROLES.CARE_COORDINATOR, ROLES.ADMIN];
@@ -25,7 +26,7 @@ export default function StaffCreateDrawer({ onClose, onCreated }) {
     const onKeyDown = event => {
       if (event.key === "Escape" && !busyRef.current) onClose();
       if (event.key !== "Tab") return;
-      const focusable = [...document.querySelectorAll(".staff-create-drawer button:not([disabled]), .staff-create-drawer input:not([disabled]), .staff-create-drawer select:not([disabled])")];
+      const focusable = [...document.querySelectorAll(".staff-create-drawer button:not([disabled]), .staff-create-drawer input:not([disabled]):not([tabindex='-1']), .staff-create-drawer select:not([disabled])")];
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first) return;
@@ -69,9 +70,8 @@ export default function StaffCreateDrawer({ onClose, onCreated }) {
               <label>Full name<input required maxLength={200} autoComplete="name" value={form.display_name} onChange={event => set("display_name", event.target.value)} placeholder="Doctor or staff name" /></label>
               <label>Work email<input required type="email" autoComplete="email" value={form.email} onChange={event => set("email", event.target.value)} placeholder="name@clinic.example" /></label>
               <label>Initial password<input required type="password" minLength={8} maxLength={128} autoComplete="new-password" value={form.password} onChange={event => set("password", event.target.value)} placeholder="At least 8 characters" /></label>
-              <label>Staff role<select required value={form.role} onChange={event => set("role", event.target.value)}>
-                {staffRoles.map(role => <option key={role} value={role}>{humanize(role)}</option>)}
-              </select></label>
+              <label>Staff role<Select className="form-select" required label="Staff role" value={form.role} onChange={value => set("role", value)}
+                options={staffRoles.map(role => ({ value: role, label: humanize(role) }))} /></label>
             </div>
             <p className="staff-create-hint">Share the initial password securely with the staff member. They can change it after signing in.</p>
             {error && <div className="form-error" role="alert">{error}</div>}

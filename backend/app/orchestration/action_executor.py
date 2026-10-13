@@ -23,7 +23,8 @@ class ActionExecutor:
     appointment request/reschedule) are delivered by email when SMTP is
     configured and simulated otherwise; the response says which ("delivery").
     Coordinator tasks are real in-app tasks (an exception visible to staff).
-    Approval-gated actions are only recorded here and run when staff approve.
+    Approval-gated actions are recorded for staff approval unless the action
+    explicitly permits a supervisor-agent self-approval.
     """
 
     def __init__(self, db: Session):
@@ -41,16 +42,26 @@ class ActionExecutor:
             self.delivery = "mock"
 
     # ------------------------------------------------------------------ run
-    def execute(self, journey_id, journey_step_id, action_type, payload, requested_by="SUPERVISOR"):
+    def execute(
+        self,
+        journey_id,
+        journey_step_id,
+        action_type,
+        payload,
+        requested_by="SUPERVISOR",
+        allow_agent_self_approval=False,
+    ):
         definition = self.registry.validate(action_type)
         key = build_idempotency_key(journey_id, journey_step_id, action_type, payload)
         existing = self.db.query(ActionExecution).filter(ActionExecution.idempotency_key == key).first()
         if existing:
+            approval = (existing.response_payload or {}).get("approval") or {}
             return existing, {
                 "duplicate": True,
                 "verified": existing.status == "SUCCESS",
                 "awaiting_approval": existing.status == "REQUESTED",
                 "delivery": (existing.response_payload or {}).get("delivery"),
+                "auto_approved": approval.get("decision") == "AUTO_APPROVED",
             }
         execution = ActionExecution(
             id=uuid4(), journey_id=journey_id, journey_step_id=journey_step_id,
@@ -58,8 +69,13 @@ class ActionExecutor:
             idempotency_key=key, request_payload=payload or {}, response_payload=None,
             requested_at=_now(), completed_at=None,
         )
-        if definition.requires_approval:
-            # Never run by an agent: recorded so staff can approve or reject it.
+        auto_approve = (
+            definition.requires_approval
+            and allow_agent_self_approval
+            and definition.agent_may_self_approve
+            and requested_by == "SUPERVISOR"
+        )
+        if definition.requires_approval and not auto_approve:
             execution.status = "REQUESTED"
             execution.response_payload = {
                 "accepted": False, "status": "AWAITING_APPROVAL",
@@ -70,11 +86,21 @@ class ActionExecutor:
             return execution, {"duplicate": False, "verified": False, "awaiting_approval": True, "delivery": None}
         self.db.add(execution)
         self.db.flush()
-        self._run(execution, action_type, payload or {})
+        approval = None
+        if auto_approve:
+            approval = {
+                "decision": "AUTO_APPROVED",
+                "by": "SUPERVISOR",
+                "by_role": "AGENT",
+                "at": _now().isoformat(),
+                "policy": "action_definition.agent_may_self_approve",
+            }
+        self._run(execution, action_type, payload or {}, extra={"approval": approval} if approval else None)
         self.db.flush()
         return execution, {
             "duplicate": False, "verified": execution.status == "SUCCESS", "awaiting_approval": False,
             "delivery": (execution.response_payload or {}).get("delivery"),
+            "auto_approved": auto_approve,
         }
 
     def _run(self, execution: ActionExecution, action_type: str, payload: dict, extra: dict | None = None):

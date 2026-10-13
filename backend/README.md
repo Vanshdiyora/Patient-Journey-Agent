@@ -104,7 +104,17 @@ using a database migration account:
 
 ```powershell
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261012_chat_access_and_audit.sql"
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261013_patient_provisioning_and_pathway_roles.sql"
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261014_refine_clinical_pathway_workflows.sql"
 ```
+
+The pathway migration publishes new versions of the six seeded care pathways,
+assigning role owners and operational step deadlines. Completed journeys retain
+their original pathway version; active journeys sync to the new version when
+their steps are next loaded. Back up the database before applying data migrations.
+
+Agent self-approval is limited to creating a coordinator follow-up task. Other
+approval-gated actions remain pending for staff review.
 
 Review and grant patient assignments in User management after migration.
 
