@@ -31,6 +31,15 @@
 .metric-copy strong{font:800 24px "Manrope";line-height:1.2}
 .metric-copy small{font-size:10px;color:#899592}
 .metric-arrow{margin-left:auto;color:#b4c0bd}
+.metric-card--skeleton{min-height:86px}
+.metric-skeleton-icon,.metric-skeleton-copy i,.metric-skeleton-arrow{display:block;background:#edf1f0;animation:shimmer 1.4s infinite}
+.metric-skeleton-icon{border-radius:10px}
+.metric-skeleton-copy{flex:1;gap:5px}
+.metric-skeleton-copy i{border-radius:5px}
+.metric-skeleton-label{width:58%;height:9px}
+.metric-skeleton-value{width:35%;height:23px}
+.metric-skeleton-hint{width:72%;height:8px}
+.metric-skeleton-arrow{width:16px;height:16px;flex:none;margin-left:auto;border-radius:5px}
 
 .content-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(300px,1fr);gap:16px}
 .content-grid--dashboard{grid-template-columns:minmax(0,1.9fr) minmax(280px,.8fr)}

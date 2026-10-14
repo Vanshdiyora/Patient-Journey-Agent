@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useAsync } from "../../hooks/useAsync";
 import { toList } from "../../utils";
 import { isAdmin, isCoordinator, portalName } from "../../utils/roles";
-import { PageHeading, MetricCard, AlertBanner } from "../../components";
+import { PageHeading, MetricCard, MetricCardSkeleton, AlertBanner } from "../../components";
 import RecentJourneys from "./RecentJourneys";
 import SystemPulse from "./SystemPulse";
 
@@ -62,10 +62,10 @@ export default function Dashboard() {
       actions={<button className="secondary-btn" onClick={() => refetch()}><RefreshCw size={16} /> Refresh</button>}
     />
 
-    <section className="metric-grid">
-      {(loading ? Array.from({ length: 4 }) : metricsFor(user, d)).map((m, i) =>
-        m ? <MetricCard key={i} {...m} /> : <div className="metric-card" key={i} />
-      )}
+    <section className="metric-grid" aria-label="Dashboard metrics" aria-busy={loading}>
+      {loading
+        ? Array.from({ length: 4 }, (_, i) => <MetricCardSkeleton key={i} />)
+        : metricsFor(user, d).map((m, i) => <MetricCard key={i} {...m} />)}
     </section>
 
     {error && <AlertBanner tone="error">

@@ -66,7 +66,9 @@ export const journeysApi = {
   updateStepTimeLimit: (journeyId, stepId, time_limit_hours) =>
     patch(`/api/v1/journeys/${journeyId}/steps/${stepId}/time-limit`, { time_limit_hours }),
   evaluate: (id) => post(`/api/v1/journeys/${id}/evaluate`),
-  orchestrate: (id) => post(`/api/v1/journeys/${id}/orchestrate`),
+  // The backend completes this request only after the orchestration run finishes.
+  // It can take longer than the timeout used for ordinary API calls.
+  orchestrate: (id) => api.post(`/api/v1/journeys/${id}/orchestrate`, null, { timeout: 0 }).then(response => response.data),
   events: (id, params) => get(`/api/v1/journeys/${id}/events`, params),
   addEvent: (id, payload) => post(`/api/v1/journeys/${id}/events`, payload),
   actions: (id, params) => get(`/api/v1/journeys/${id}/actions`, params),

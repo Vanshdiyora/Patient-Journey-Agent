@@ -52,5 +52,6 @@
   .exception-card{flex-direction:column}
   .exception-card>.secondary-btn{align-self:flex-start}
   .login-heading h2{font-size:23px}
+  .demo-login-grid{grid-template-columns:1fr}
   .event-form-grid{grid-template-columns:1fr}
 }

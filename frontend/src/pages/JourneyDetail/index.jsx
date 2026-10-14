@@ -37,8 +37,8 @@ export default function JourneyDetail() {
   const { user } = useAuth();
   const observability = canViewObservability(user);
 
-  if (journey.loading) return <DetailSkeleton />;
-  if (journey.error) return <ErrorState error={journey.error} title="Could not load journey" />;
+  if (journey.error && journey.data?.id !== journeyId) return <ErrorState error={journey.error} title="Could not load journey" />;
+  if (journey.data?.id !== journeyId) return <DetailSkeleton />;
 
   const j = journey.data;
   const stepRows = toList(steps.data);
@@ -197,6 +197,12 @@ export default function JourneyDetail() {
       <span>Started {formatDate(j.started_at, true)}</span>
     </div>
     {message && <AlertBanner tone={messageTone}>{message}</AlertBanner>}
+    {busy === "orchestrate" && !runResult && <Panel wide className="run-result-panel" title="Orchestration running" subtitle="The backend is evaluating the journey and recording agent activity.">
+      <div className="run-pending" role="status" aria-live="polite">
+        <RefreshCw size={18} className="run-pending-icon" />
+        <span><strong>Status: Running</strong>The result will appear here when the backend finishes.</span>
+      </div>
+    </Panel>}
 
     {runResult && <Panel wide className="run-result-panel" title="Latest orchestration result" subtitle="Decision, agent outputs, execution response, and run steps" action={runResult.run_id && <Link className="text-link" to={`${PATHS.agentRuns}?run=${runResult.run_id}`}>Open saved run</Link>}>
       <AgentRunDetails run={runResult} />

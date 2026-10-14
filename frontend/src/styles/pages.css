@@ -170,6 +170,18 @@
 .run-json{margin-top:9px;min-width:0}
 .run-json summary{cursor:pointer;color:var(--teal);font-size:10px;font-weight:700}
 .run-json pre{margin:7px 0 0;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9f9;border:1px solid #e8eceb;border-radius:7px;padding:10px;font:10px/1.5 ui-monospace,monospace;color:#566562}
+.run-fields{margin:8px 0 0;padding:8px 12px;border:1px solid #e8eceb;border-radius:7px;background:#f7f9f9;overflow-wrap:anywhere}
+.run-field{display:grid;grid-template-columns:minmax(100px,30%) minmax(0,1fr);gap:10px;padding:5px 0;border-bottom:1px solid #e8eceb}
+.run-field:last-child{border-bottom:0}
+.run-field dt{font-weight:700;color:#687a75}
+.run-field dd{margin:0;min-width:0}
+.run-field .run-fields{margin:0;padding:0;border:0;background:transparent}
+.run-field-list{margin:0;padding-left:18px}
+.run-field-list li{padding:2px 0}
+.run-pending{display:flex;align-items:center;gap:12px;padding:18px;color:#40514d}
+.run-pending span{display:flex;flex-direction:column;gap:3px}
+.run-pending-icon{flex:none;animation:run-pending-spin 1.5s linear infinite}
+@keyframes run-pending-spin{to{transform:rotate(360deg)}}
 .run-boundary{font-size:10px;color:#778783;padding:8px 18px;margin:0}
 .journey-run-list,.journey-actions{padding:5px 12px}
 .journey-run,.journey-action{border-bottom:1px solid #edf0f0}
@@ -236,6 +248,20 @@
 .error-icon{width:16px;height:16px;border-radius:50%;background:#c74b53;color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none}
 .secure-note{margin-top:20px;display:flex;align-items:center;justify-content:center;gap:6px;color:#899592;font-size:9px}
 .secure-note svg{color:#52a078}
+.demo-login{margin-top:25px;padding-top:20px;border-top:1px solid #dfe7e4}
+.demo-login-heading{display:flex;flex-direction:column;gap:4px;margin-bottom:11px}
+.demo-login-heading strong{font:700 13px "Manrope";color:#314943}
+.demo-login-heading span{font-size:10px;color:#72817c}
+.demo-login-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.demo-login-account{min-width:0;min-height:62px;padding:10px;border:1px solid #dce7e3;border-radius:9px;background:#fff;color:#36524b;display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
+.demo-login-account:hover{background:#eef8f5;border-color:#87c7b8}
+.demo-login-account:focus-visible{outline:2px solid #2b9b84;outline-offset:2px}
+.demo-login-account:disabled{opacity:.55;cursor:wait}
+.demo-login-account span{min-width:0}
+.demo-login-account strong,.demo-login-account small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.demo-login-account strong{font-size:11px}
+.demo-login-account small{margin-top:4px;font-size:9px;color:#72817c}
+.demo-login-account svg{flex:none;color:#2d9c85}
 
 /* Pathway authoring and per-journey step deadlines */
 .pathway-form{padding:18px;display:flex;flex-direction:column;gap:18px}

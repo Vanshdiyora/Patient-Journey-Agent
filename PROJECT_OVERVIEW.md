@@ -13,7 +13,7 @@ Deterministic rules and verified actions control journey state; three optional A
 | Backend | FastAPI REST API under `/api/v1`, authenticated chat WebSocket at `/ws/chat`, SQLAlchemy models, authorization, business services, rules, and orchestration. |
 | Database | PostgreSQL is the source of truth for accounts, patients, pathway templates, journeys, steps, events, actions, exceptions, agent runs, and chat history/audit. |
 | AI | Optional OpenAI-compatible MAQ AI client for a three-agent LangGraph workflow and a separate tool-using CarePath chat assistant. The orchestration graph has a rules-only fallback when AI is unavailable. |
-| Delivery | Patient-facing reminders and requests use SMTP when configured; otherwise local mock integrations record simulated outcomes. Coordinator tasks appear as in-app exceptions after staff approval. |
+| Delivery | Patient-facing reminders and requests use SMTP when configured; otherwise local mock integrations record simulated outcomes. Coordinator tasks appear as in-app exceptions after staff approval or policy-permitted supervisor self-approval. |
 
 Source entry points: [backend app](backend/app/main.py), [API router](backend/app/api/router.py), [frontend routes](frontend/src/routes/index.jsx), [database setup](backend/scripts/setup_database.py).
 
@@ -104,7 +104,7 @@ If the model is disabled, unavailable, or returns unusable output, the graph swi
 
 ### 5. Action approval and delivery
 
-The action registry allows document requests, reminders, appointment requests, rescheduling, and coordinator task creation. The executor uses an idempotency key to avoid duplicate actions and stores each attempt. `CREATE_COORDINATOR_TASK` is recorded as `REQUESTED` until staff approve or reject it; approval creates an in-app task. Other patient-facing actions use configured SMTP or a mock service. [Action definitions](backend/app/action_registry/definitions.py) · [executor](backend/app/orchestration/action_executor.py) · [approval API](backend/app/api/v1/actions.py).
+The action registry allows document requests, reminders, appointment requests, rescheduling, and coordinator task creation. The executor uses an idempotency key to avoid duplicate actions and stores each attempt. `CREATE_COORDINATOR_TASK` normally waits in `REQUESTED` for staff approval or rejection. The supervisor can self-approve this specific action when the action policy permits it; approval creates an in-app task. Other patient-facing actions use configured SMTP or a mock service. [Action definitions](backend/app/action_registry/definitions.py) · [executor](backend/app/orchestration/action_executor.py) · [approval API](backend/app/api/v1/actions.py).
 
 ### 6. CarePath chat assistant
 
@@ -154,7 +154,7 @@ Important API groups: `/auth`, `/dashboard`, `/patients`, `/pathways`, `/journey
 
 ## Open items before production
 
-- Apply [the patient-access and audit migration](backend/migrations/20261012_chat_access_and_audit.sql) to existing databases before deploying this code, then grant each clinician and coordinator the patients they should manage. Existing staff have no patient grants by default.
+- Apply all outstanding [backend migrations](backend/migrations) to existing databases in order before deploying this code, then grant each clinician and coordinator the patients they should manage. Existing staff have no patient grants by default.
 - Keep the database role used by the application limited to the required tables, and restrict administrator access to audit records and patient grants.
 - Replace shared demo credentials, configure durable protected evidence storage, and provide a strong fixed JWT secret and deployed CORS origins.
 - Configure and test real SMTP delivery and the AI provider in the target environment. Mock delivery and rules-only orchestration are implemented fallbacks; this repository does not establish production deployment readiness.

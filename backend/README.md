@@ -1,21 +1,21 @@
 # Patient Journey Orchestrator — 3-Agent Backend
 
-This backend implements the architecture from the project approach document:
+CarePath manages patient care pathways, journey steps, evidence, exceptions, and
+follow-up across staff and patient portals. Deterministic rules own journey state;
+three optional AI agents help assess blockers and coordinate allowed actions.
 
-- Event Processor
-- Deterministic control plane
-- Journey Intelligence Agent
-- Coordination Agent
-- Supervisor Agent
-- LangGraph conditional supervisor loop
-- Action Registry
-- Verification and idempotency
-- Mock scheduling / communication / document / clinical-event services
-- Audit / agent trace persistence
-- PostgreSQL as the source of truth
-- Optional AI through an environment-configured OpenAI-compatible API
+## Features
 
-All protected API routes require an email/password login and a signed bearer token. User passwords are stored as bcrypt hashes.
+- Role-scoped API for administrators, clinicians, care coordinators, and patients.
+- Versioned care pathways with step owners, dependencies, milestones, and action deadlines.
+- Patient journeys with event ingestion, evidence review, priority, and progress tracking.
+- Supervisor, Journey Intelligence, and Coordination agents in a bounded LangGraph
+  workflow, with a rules-only fallback when AI is unavailable.
+- Allowlisted follow-up actions, idempotency, verification, and approval controls.
+- Exceptions, agent runs, and an audited chat assistant with confirmation for writes.
+
+PostgreSQL is the source of truth. Protected routes use email/password login and
+signed bearer tokens; passwords are stored as bcrypt hashes.
 
 ## Code layout
 
@@ -58,8 +58,8 @@ Run from the repository root:
 
 ```powershell
 python -m pip install -r backend/requirements.txt
-# If backend/.env is missing, copy backend/.env.example to backend/.env first.
-# Set DATABASE_URL in backend/.env to your Neon URL before continuing.
+if (-not (Test-Path backend/.env)) { Copy-Item backend/.env.example backend/.env }
+# Set DATABASE_URL to your database URL and AUTH_JWT_SECRET in backend/.env.
 python backend/scripts/setup_database.py
 ```
 
@@ -99,8 +99,11 @@ SELECT email, role FROM users WHERE is_active ORDER BY role, email LIMIT 20;
 
 This code expects the PostgreSQL schema/seed already created for Patient Journey Orchestrator. It does **not** run `Base.metadata.create_all()` against the existing database.
 
-Before starting this version against an existing database, apply the new migration
-using a database migration account:
+For a database that already has the earlier migrations, apply the following
+newer migrations in order with a database migration account. Set
+`$env:DATABASE_URL` to the same connection URL used in `backend/.env` before
+running `psql`; a value in `.env` is not automatically exported to PowerShell.
+Back up the database first.
 
 ```powershell
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261012_chat_access_and_audit.sql"
@@ -118,45 +121,14 @@ approval-gated actions remain pending for staff review.
 
 Review and grant patient assignments in User management after migration.
 
-The SQL seed previously supplied for this project creates the synthetic data.
+For an empty local PostgreSQL database, use the same
+`python backend/scripts/setup_database.py` command shown above. It creates the
+schema, applies all migrations, seeds demo data, and verifies the result. Do not
+run the bulk seed SQL against a database that already contains application data.
 
-For an empty local PostgreSQL database, run these from the repository root:
-
-```powershell
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/Create Tables.sql"
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/patient_journey_orchestrator_seed.sql"
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_02_add_step_owners.sql"
-```
-
-The seed creates 1,200 staff accounts and 1,200 patient accounts. Each patient
-has a unique email and a linked `PATIENT` user row. All seed passwords start as
-`Test@123`; PostgreSQL `pgcrypto` stores bcrypt hashes rather than raw
-passwords. It also generates synthetic clinical-like data.
-
-## Patient portal demo accounts
-
-Patient records support an optional email for compatibility with older imported
-rows. A portal account is stored in `users` with `role = PATIENT` and its
-`patient_id` linked to exactly one patient. Patient-scoped endpoints use that
-link to return only the authenticated patient's own journey.
-
-For a legacy existing database that also needs the optional patient email
-column and demo portal accounts, run these from the repository root:
-
-```powershell
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20260930_add_patient_email.sql"
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_02_add_step_owners.sql"
-python "backend/scripts/seed_demo_patient_portal.py"
-```
-
-If your shell has a non-boolean `DEBUG` environment variable, run
-`$env:DEBUG = "false"` first so the settings loader can start.
-
-This creates four additional synthetic patients with one journey each and
-matching portal accounts. Their initial password is `Test@123`, stored as a
-bcrypt hash.
+Patient portal accounts have `role = PATIENT` and link to a single patient via
+`users.patient_id`. Patient-scoped endpoints return only that patient's data.
+Imported patient records need a linked account before they can use the portal.
 
 ## Starting a patient's journey
 
@@ -168,8 +140,9 @@ empty care plan until staff starts a journey.
 Administrators can create active pathway templates and edit an active pathway
 from the right-side drawer in **Care pathways**. Saving an edit creates a new
 active version and makes the previous version inactive. Existing patient
-journeys keep their original pathway and steps; future journeys use the new
-version. Retained steps carry their dependencies and action rules forward.
+journeys that are active or blocked sync to the new active version when their
+steps are next requested. Completed journeys keep their previous version.
+Retained steps carry their dependencies and action rules forward.
 Each ordered step has a code, name, type, details, a target day measured from
 journey start, and a time allowance that begins when the step is ready. The UI
 accepts hours, days, or weeks while the API stores the allowance in hours.
@@ -199,59 +172,13 @@ server records a completion event with the confirming staff user and
 reevaluates the journey so an eligible next step can become ready. Patients
 cannot self-verify completion. For a patient-owned step, the patient submits a
 short completion note from **My Journey**; this remains pending until staff
-reviews it and confirms completion. Clinician-, coordinator-, and
-administrator-owned steps are restricted to the matching role (administrators
-may confirm clinician/coordinator work); general staff steps can be confirmed
-by any staff role. Agent-owned steps can be completed only when an allowed
-agent action succeeds and passes the action verification layer. The current
-action integrations are mocks, so agent-owned completion is demonstration
-behavior and must not be treated as a production clinical integration.
-
-### Upgrade an existing database
-
-Run these commands from the repository root, using the same database and
-credentials configured in `backend/.env` (`DATABASE_URL`). For the current
-`column pathway_steps.owner_role does not exist` error, run the ownership
-migration (the second command). If the time-limit migration has not previously
-been applied, run both in order:
-
-```powershell
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_02_add_step_owners.sql"
-```
-
-If only the `owner_role` columns are missing, run just:
-
-```powershell
-psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_02_add_step_owners.sql"
-```
-
-If your PostgreSQL username, host, port, or database name differs from the
-example, replace those connection values. The `20260930_add_patient_email.sql`
-migration is separate; run it only if your existing database also lacks the
-optional `patients.email` column needed by the patient portal.
-
-After applying the migration, restart the backend. To verify the required
-columns exist, run:
-
-```sql
-SELECT table_name, column_name
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND (
-      (table_name = 'pathway_steps' AND column_name IN ('owner_role', 'time_limit_hours'))
-      OR (table_name = 'journey_steps' AND column_name IN ('owner_role', 'time_limit_hours'))
-  )
-ORDER BY table_name;
-```
-
-The query should return both `owner_role` and `time_limit_hours` for each
-table. Do not rerun the bulk seed SQL against an existing database; it deletes
-and recreates its synthetic records.
-
-The patient must have a `PATIENT` user account linked to that same patient
-record. Seeded patients already have linked accounts; staff should confirm the
-link when working with imported records.
+reviews it and confirms completion. Only the assigned clinician can confirm a
+patient-owned step after a submission. Clinician-, coordinator-, and
+administrator-owned steps are restricted to their matching roles. Agent-owned
+steps can be completed only when an allowed
+agent action succeeds and passes the action verification layer. Patient-facing
+actions use SMTP when configured and mock services otherwise; appointment
+requests are messages, not bookings in a scheduling system.
 
 ## Run
 
@@ -259,11 +186,10 @@ link when working with imported records.
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
-# edit .env and set DATABASE_URL to match your local PostgreSQL credentials
-cd "C:\Work\AZDES\Agents\Patient Journey Orchestrator\code\backend"
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+python -m pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# Set DATABASE_URL and AUTH_JWT_SECRET in .env.
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The backend reads `.env` from the backend project directory, regardless of the
@@ -271,12 +197,14 @@ shell's current working directory. `DATABASE_URL` is required; the example
 value may need to be updated to match your local PostgreSQL user, password,
 host, and database.
 
-Open `/docs`.
+Open `http://127.0.0.1:8000/docs` for the interactive API reference. Initialize
+an empty database from the repository root before starting the server.
 
 ## Local authentication
 
-Sign in at `/login` with a seeded user's email and `Test@123`. The backend
-verifies the bcrypt hash and returns a JWT. Protected routes reject requests
+Sign in at `/login` with a seeded user's email and `Test@123`. Fresh demo
+database setup seeds `abhi@gmail.com` as the patient portal shortcut account.
+The backend verifies the bcrypt hash and returns a JWT. Protected routes reject requests
 without a valid bearer token; there is no implicit development-user bypass.
 
 ## AI provider configuration
@@ -408,9 +336,15 @@ rules -> Supervisor -> (Journey Intelligence | Coordination -> Action Executor -
 |---|---|
 | Rule engine (every orchestrate / evaluate / event) | Pending -> Ready when earlier steps are done and dependencies are met; -> Blocked when a dependency is unmet or the step is past its due date; journey status follows. Cancelled journeys are never reopened. |
 | Agent | **Only** `Completed`, and only when all hold: the step's owner is `AGENT`; it is Ready/In progress; the action ran and passed verification; the action fulfils that step type (appointment action -> appointment/follow-up step, document request -> lab/document/referral step, reminder -> reminder/education/counselling step). Otherwise the action is sent as support and the step is untouched. |
-| Staff / patient | Complete steps through the UI, subject to the step owner's role. |
+| Staff / patient | Authorized staff confirm eligible steps. Patients submit updates on their own steps for staff review; patient submissions do not verify completion. |
 
-Other behaviour: approval-gated actions (`CREATE_COORDINATOR_TASK`) are recorded as `REQUESTED` and surfaced as an exception, never auto-run - staff **Approve / Reject** them under *Journey actions* on the journey page (`POST /api/v1/actions/{id}/approve|reject`; approving creates a real coordinator task on the Exceptions page); `ESCALATE` opens an exception for staff; the same action for the same step is never sent twice (idempotency).
+Other behaviour: `CREATE_COORDINATOR_TASK` normally enters `REQUESTED` and
+staff can **Approve / Reject** it under *Journey actions* on the journey page
+(`POST /api/v1/actions/{id}/approve` or `/reject`). The supervisor may approve
+this specific action automatically when the action policy permits it; the
+approval is recorded with the execution. `ESCALATE` opens an exception for
+staff. Idempotency prevents the same action for the same step from being sent
+twice.
 
 **If the AI is unavailable or returns something unusable** (bad key, timeout, invalid JSON, unknown capability or action, made-up step id) the run does not fail: it continues on the built-in rules (`mode: RULES_ONLY`) and says so in the summary. The response and the saved run include `summary`, `mode`, `warnings` and `step_changes`. Saved runs use `status` SUCCESS/FAILED (DB enum); how the run ended (WAIT / ESCALATE) is `output.final_state`.
 
@@ -426,8 +360,10 @@ Search and filter parameters apply to the full set of records the caller may acc
 
 - `GET /api/v1/health`
 - `GET /api/v1/users/me`
+- `POST /api/v1/auth/login`, `POST /api/v1/auth/change-password`
 - `GET /api/v1/dashboard/summary`
 - `GET /api/v1/patients`
+- `POST /api/v1/admin/patients`, `POST /api/v1/admin/users`
 - `GET /api/v1/pathways` (administrator pathway management)
 - `POST /api/v1/pathways` (create an active pathway and ordered steps)
 - `PUT /api/v1/pathways/{pathway_id}` (create an active edited version)
@@ -440,6 +376,8 @@ Search and filter parameters apply to the full set of records the caller may acc
 - `GET /api/v1/journeys/{journey_id}/steps`
 - `POST /api/v1/journeys/{journey_id}/steps/{step_id}/complete` (staff confirmation)
 - `PATCH /api/v1/journeys/{journey_id}/steps/{step_id}/time-limit`
+- `POST /api/v1/journeys/{journey_id}/steps/{step_id}/evidence` (staff result or approval evidence; optional file up to 1 MB)
+- `GET /api/v1/journeys/{journey_id}/steps/{step_id}/evidence/{file_id}` (authorized file download)
 - `GET /api/v1/journeys/{journey_id}/events`
 - `POST /api/v1/journeys/{journey_id}/events`
 - `POST /api/v1/journeys/{journey_id}/evaluate`
@@ -449,7 +387,9 @@ Search and filter parameters apply to the full set of records the caller may acc
 - `PATCH /api/v1/exceptions/{exception_id}`
 - `GET /api/v1/agent-runs`
 - `GET /api/v1/actions/registry`
+- `GET /api/v1/journeys/{journey_id}/actions`, `POST /api/v1/actions/{action_id}/approve`, `POST /api/v1/actions/{action_id}/reject`
 - `POST /api/v1/chat/sessions`, `GET /api/v1/chat/sessions` (chat history)
+- `PATCH /api/v1/chat/sessions/{id}`, `DELETE /api/v1/chat/sessions/{id}` (rename or archive)
 - `GET /api/v1/chat/sessions/{id}/messages`
 - `POST /api/v1/chat/sessions/{id}/messages` (REST fallback for the widget)
 - `POST /api/v1/chat/sessions/{sid}/messages/{mid}/confirm` / `.../reject`
@@ -459,3 +399,10 @@ Search and filter parameters apply to the full set of records the caller may acc
 ## Important safety boundary
 
 LLMs never directly write protected journey completion state and never execute arbitrary actions. The deterministic control plane validates dependencies, permissions, action allow-lists, idempotency, verification, and persistence.
+
+## Tests
+
+From `backend/`, run `python -m unittest discover -s tests -v`. These tests
+cover access control, patient provisioning, journey priority, chat security,
+and action approval. Database setup can be checked without modification with
+`python backend/scripts/setup_database.py --verify-only` from the repository root.

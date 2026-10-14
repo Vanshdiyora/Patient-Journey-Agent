@@ -110,7 +110,8 @@ SELECT
     'PT-2026-' || lpad(gs::text, 6, '0'),
     first_names[((gs - 1) % 40) + 1],
     last_names[((gs * 7 - 1) % 50) + 1],
-    'patient' || lpad(gs::text, 6, '0') || '@patient-demo.example.test',
+    CASE WHEN gs = 1 THEN 'abhi@gmail.com'
+         ELSE 'patient' || lpad(gs::text, 6, '0') || '@patient-demo.example.test' END,
     CASE
         WHEN gs % 29 = 0 THEN date '1942-03-17' + ((gs % 6000) * interval '1 day')
         WHEN gs % 7 = 0 THEN date '1980-01-01' + ((gs * 37) % 14000) * interval '1 day'

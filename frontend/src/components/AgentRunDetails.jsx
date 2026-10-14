@@ -20,9 +20,22 @@ const ACTION_LABELS = {
   CREATE_COORDINATOR_TASK: "Coordinator task",
 };
 
-function JsonDetails({ title, value, defaultOpen = false }) {
-  if (value == null || (Array.isArray(value) && !value.length)) return null;
-  return <details className="run-json" open={defaultOpen || undefined}><summary>{title}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>;
+const isEmpty = value => value == null || (Array.isArray(value) && !value.length) || (typeof value === "object" && !Array.isArray(value) && !Object.keys(value).length);
+
+function FieldValue({ value }) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value == null) return "Not provided";
+  if (typeof value === "string" && /^[A-Z][A-Z_]+$/.test(value)) return humanize(value.toLowerCase());
+  if (typeof value !== "object") return String(value);
+  if (Array.isArray(value)) return <ul className="run-field-list">{value.map((item, index) => <li key={index}><FieldValue value={item} /></li>)}</ul>;
+  return <dl className="run-fields">{Object.entries(value).filter(([, item]) => !isEmpty(item)).map(([key, item]) =>
+    <div className="run-field" key={key}><dt>{componentName(key)}</dt><dd><FieldValue value={item} /></dd></div>
+  )}</dl>;
+}
+
+export function StructuredDetails({ title, value, defaultOpen = false }) {
+  if (isEmpty(value)) return null;
+  return <details className="run-json" open={defaultOpen || undefined}><summary>{title}</summary><FieldValue value={value} /></details>;
 }
 
 function StepChanges({ changes }) {
@@ -58,7 +71,7 @@ function ActionOutcome({ item }) {
     {a.awaiting_approval && <p className="run-note">Approve or reject it under "Journey actions" on this page.</p>}
     {a.step_completion_note && <p className="run-note">{a.step_completed ? "Step completed. " : "Step not changed. "}{a.step_completion_note}</p>}
     {a.error && <p className="form-error">{a.error}</p>}
-    <JsonDetails title="Execution response" value={a.response} />
+    <StructuredDetails title="Execution response" value={a.response} />
   </div>;
 }
 
@@ -101,8 +114,8 @@ export default function AgentRunDetails({ run }) {
       {out.next_capability && <p><b>Direction:</b> {humanize(out.next_capability)}{out.target_step_name ? ` - ${out.target_step_name}` : ""}</p>}
       {out.action_type && <p><b>Suggested action:</b> {humanize(out.action_type)}</p>}
       {out.assessment && <p><b>Assessment:</b> {out.assessment}</p>}
-      <JsonDetails title="Full agent output" value={run.output} />
-      <JsonDetails title="Input context" value={run.input_context} />
+      <StructuredDetails title="Full agent output" value={run.output} />
+      <StructuredDetails title="Input context" value={run.input_context} />
     </div>;
   }
 
@@ -147,8 +160,8 @@ export default function AgentRunDetails({ run }) {
         {call.reason && call.operation !== "ai_unavailable" && <small>{call.reason}</small>}
       </li>)}</ol>
     </details>}
-    <JsonDetails title="Technical details (JSON)" value={{ decision, result: output.result, calls }} />
-    {saved && <JsonDetails title="Input context" value={run.input_context} />}
+    <StructuredDetails title="Additional run details" value={{ decision, result: output.result }} />
+    {saved && <StructuredDetails title="Input context" value={run.input_context} />}
     <p className="run-boundary">Operational support only. Patient messages are emailed when SMTP is configured, otherwise simulated; staff should verify follow-up.</p>
   </div>;
 }

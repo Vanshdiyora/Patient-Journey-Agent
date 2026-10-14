@@ -68,6 +68,13 @@ in `services/chat.js`. Backend authorization remains authoritative.
 - Patient portal: My Journey with Overview / Care plan / Updates tabs
 - Login / protected routes / password change
 
+In Vite development mode, the login page shows one-click demo accounts for the
+administrator, clinician, care coordinator, and patient portals. They use the
+shared seeded password `Test@123`; the patient demo email is `abhi@gmail.com`.
+Set `VITE_ENABLE_DEMO_LOGIN=true` before building a deployed demo to show these
+shortcuts there. They are hidden in production builds by default. Manual
+email/password login remains available.
+
 The chat widget loads older messages as the conversation is scrolled upward
 and more conversations as History is scrolled downward. It fetches batches of
 10 through the existing chat API and preserves the visible message when older

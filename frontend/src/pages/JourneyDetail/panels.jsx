@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Bot, CalendarClock, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { formatDate, humanize } from "../../utils";
 import { Panel, EmptyState, ErrorState, SkeletonRows, Badge, Pagination } from "../../components";
-import AgentRunDetails from "../../components/AgentRunDetails";
+import AgentRunDetails, { StructuredDetails } from "../../components/AgentRunDetails";
 import AddEventForm from "./AddEventForm";
 
 export function EventsPanel({ journeyId, eventRows, loading, error, busy, onAdd, onDownloadEvidence, offset, total, onPage }) {
@@ -59,7 +59,7 @@ export function ActionsPanel({ actionRows, loading, error, busy, onDecide, offse
       {a.response_payload?.delivery && a.status === "SUCCESS" && <small className="journey-action-delivery">
         {a.response_payload.delivery === "email" ? "Delivered by email" : a.response_payload.delivery === "in_app" ? "Created as an in-app task" : "Simulated - email is not configured"}
       </small>}
-      {a.response_payload && <details className="run-json"><summary>Execution response</summary><pre>{JSON.stringify(a.response_payload, null, 2)}</pre></details>}
+      <StructuredDetails title="Execution response" value={a.response_payload} />
       {a.error_message && <p className="form-error">{a.error_message}</p>}
     </div>)}</div> : <EmptyState small title="No actions recorded" text="Orchestration may decide to wait or escalate without executing an action." />}
     {!loading && !error && <Pagination offset={offset} count={actionRows.length} total={total ?? 0} onPage={onPage} />}

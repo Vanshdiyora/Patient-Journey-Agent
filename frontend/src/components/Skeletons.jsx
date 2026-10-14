@@ -15,3 +15,15 @@ export function SkeletonRows({ count = 6 }) {
 export function DetailSkeleton() {
   return <div className="skeleton-detail"><i /><i /><i /></div>;
 }
+
+export function MetricCardSkeleton() {
+  return <div className="metric-card metric-card--skeleton" aria-hidden="true">
+    <div className="metric-icon metric-skeleton-icon" />
+    <div className="metric-copy metric-skeleton-copy">
+      <i className="metric-skeleton-label" />
+      <i className="metric-skeleton-value" />
+      <i className="metric-skeleton-hint" />
+    </div>
+    <i className="metric-skeleton-arrow" />
+  </div>;
+}

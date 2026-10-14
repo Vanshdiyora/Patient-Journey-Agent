@@ -4,6 +4,15 @@ import { useAuth } from "../context/AuthContext";
 import Brand from "../components/Brand";
 import { getErrorMessage } from "../utils";
 
+const DEMO_PASSWORD = "Test@123";
+const DEMO_ACCOUNTS = [
+  { role: "Administrator", email: "a.ansari0884@carepath-health.example" },
+  { role: "Clinician", email: "a.ansari0084@carepath-health.example" },
+  { role: "Care coordinator", email: "a.ansari0284@carepath-health.example" },
+  { role: "Patient", email: "abhi@gmail.com" },
+];
+const SHOW_DEMO_LOGIN = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === "true";
+
 export default function Login() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
@@ -11,21 +20,32 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const signIn = async (credentials) => {
+    if (loading) return;
     setError("");
-    if (!email.trim() || !password) {
+    if (!credentials.email || !credentials.password) {
       setError("Enter your email and password.");
       return;
     }
     setLoading(true);
     try {
-      await login({ email: email.trim(), password });
+      await login(credentials);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  const submit = (event) => {
+    event.preventDefault();
+    signIn({ email: email.trim(), password });
+  };
+
+  const signInAsDemo = (account) => {
+    setEmail(account.email);
+    setPassword(DEMO_PASSWORD);
+    signIn({ email: account.email, password: DEMO_PASSWORD });
   };
 
   return (
@@ -69,6 +89,29 @@ export default function Login() {
               {loading ? <><span className="button-spinner" />Signing in…</> : <>Continue <ArrowRight size={18} /></>}
             </button>
           </form>
+          {SHOW_DEMO_LOGIN && (
+            <div className="demo-login">
+              <div className="demo-login-heading">
+                <strong>Demo accounts</strong>
+                <span>Choose a role to sign in. Shared password: {DEMO_PASSWORD}</span>
+              </div>
+              <div className="demo-login-grid">
+                {DEMO_ACCOUNTS.map(account => (
+                  <button
+                    type="button"
+                    className="demo-login-account"
+                    key={account.role}
+                    onClick={() => signInAsDemo(account)}
+                    disabled={loading}
+                    aria-label={`Sign in as ${account.role} using ${account.email}`}
+                  >
+                    <span><strong>{account.role}</strong><small>{account.email}</small></span>
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="secure-note"><ShieldCheck size={17} /><span>Identity is verified by the CarePath backend.</span></div>
           <p className="login-switch">Patient accounts are created by an administrator. Ask your care team for your sign-in details.</p>
         </div>
