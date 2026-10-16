@@ -1,4 +1,4 @@
-/** Public API for frontend features. */
+/** Public service API for application screens and shared UI. */
 export { default as api } from "./client";
 export { chatApi } from "./chat";
 export {

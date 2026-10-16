@@ -35,25 +35,30 @@ VITE_API_TIMEOUT_MS=300000
 
 `src/main.jsx` mounts the app and imports `styles/index.css`. `src/App.jsx` owns
 providers; `src/routes/` owns path constants, access guards, and lazy page routes.
+The application uses Vite and React Router; it does not use Next.js routing.
 
 ```text
 frontend/src/
-  components/       Small controls in ui.jsx; complex controls and chat/ separate
-  context/          Auth and toast state
+  components/       Shared controls; chat/ contains chat-specific UI
+  context/          Application-wide auth and toast state
+  features/         Feature-owned pages, UI, and API clients
   hooks/            Reusable React hooks
   layouts/          App shell and role-specific navigation
-  pages/            One-file routes at the top level; larger features in folders
+  pages/            App-level forbidden and not-found route views
   routes/           Route tree, paths, and guards
-  services/         client.js transport, api.js resource clients, chat.js socket API
+  services/         Shared Axios transport, chat socket API, public API barrel
   styles/           Ordered global CSS layers imported by index.css
-  utils/            Shared helpers in index.js and role rules in roles.js
+  utils/            Shared helpers and role rules
 ```
 
-Keep a page in one file until it has reusable or independently complex parts.
-Put helpers used by several pages in `components/`, `hooks/`, or `utils/`.
-`services/index.js` is the public API for screens; `services/client.js` is the
-only Axios instance. API calls stay in `services/api.js`, except the chat socket
-in `services/chat.js`. Backend authorization remains authoritative.
+Business route views and their feature-specific UI are grouped under
+`features/<feature>/pages/` and `features/<feature>/components/` alongside their
+API clients. `routes/` composes these views and retains access guards and URL
+definitions. Put helpers used across features in `components/`, `hooks/`, or
+`utils/`. `services/index.js` is the public API for screens;
+`services/client.js` is the only Axios instance. `services/api.js` remains a
+compatibility barrel, and the chat socket client remains in `services/chat.js`.
+Backend authorization remains authoritative.
 
 ## Pages
 
