@@ -57,17 +57,6 @@ export function ErrorState({ error, title = "Something went wrong", onRetry }) {
 }
 
 /**
- * JsonView â€” pretty-printed JSON block.
- */
-export function JsonView({ data, maxHeight }) {
-  return (
-    <pre className="json-view" style={maxHeight ? { maxHeight } : undefined}>
-      {JSON.stringify(data ?? {}, null, 2)}
-    </pre>
-  );
-}
-
-/**
  * MetricCard â€” dashboard KPI card with icon, label, value and hint.
  */
 export function MetricCard({ icon: Icon, label, value, hint, tone = "teal" }) {

@@ -101,7 +101,6 @@
 .patient-step-submit .secondary-btn{min-height:32px}
 
 /* Events / compact lists */
-.json-view{margin:0;padding:16px;max-height:330px;overflow:auto;background:#f7f9f9;color:#566562;font:9px/1.6 ui-monospace,monospace}
 .compact-list,.event-list{padding:8px 16px}
 .compact-row,.event-row{display:flex;align-items:center;gap:9px;padding:10px 2px;border-bottom:1px solid #edf0f0}
 .compact-row:last-child,.event-row:last-child{border-bottom:0}
@@ -167,9 +166,8 @@
 .run-trace li strong{margin-right:8px}
 .run-trace li span{color:#64736f}
 .run-trace li small{display:block;color:#87938f}
-.run-json{margin-top:9px;min-width:0}
-.run-json summary{cursor:pointer;color:var(--teal);font-size:10px;font-weight:700}
-.run-json pre{margin:7px 0 0;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9f9;border:1px solid #e8eceb;border-radius:7px;padding:10px;font:10px/1.5 ui-monospace,monospace;color:#566562}
+.run-trace{margin-top:9px;min-width:0}
+.run-trace summary{cursor:pointer;color:var(--teal);font-size:10px;font-weight:700}
 .run-boundary{font-size:10px;color:#778783;padding:8px 18px;margin:0}
 .journey-run-list,.journey-actions{padding:5px 12px}
 .journey-run,.journey-action{border-bottom:1px solid #edf0f0}
@@ -182,6 +180,10 @@
 .journey-run .run-detail-body{padding:10px 4px 14px}
 .journey-action{padding:10px 4px}
 .journey-action-head{display:flex;align-items:center;gap:9px}
+.run-pending{display:flex;align-items:center;gap:12px;padding:14px 18px;background:#f5f9f8;color:#52615e;font-size:11px}
+.run-pending-icon{flex:none;color:var(--teal);animation:run-pending-spin 1.4s linear infinite}
+.run-pending strong{display:block;color:#354843}
+@keyframes run-pending-spin{to{transform:rotate(360deg)}}
 
 /* Event forms (journey detail add event, patient report form) */
 .event-form{border-top:1px solid #edf0f0;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
@@ -224,6 +226,19 @@
 .login-heading p{font-size:12px;line-height:1.6;color:var(--muted);margin:0}
 .form-stack{display:flex;flex-direction:column;gap:17px}
 .form-stack label{font-size:11px;color:#52615e;font-weight:600}
+.demo-login{margin-top:18px;padding-top:15px;border-top:1px solid #e3eae7}
+.demo-login-heading{display:flex;flex-direction:column;gap:3px}
+.demo-login-heading strong{font-size:11px;color:#354843}
+.demo-login-heading span{font-size:10px;line-height:1.5;color:#778783}
+.demo-login-grid{display:grid;gap:7px;margin-top:10px}
+.demo-login-account{width:100%;min-width:0;min-height:42px;padding:8px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #dfe8e5;border-radius:8px;background:#fff;color:#40534e;text-align:left;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s}
+.demo-login-account:hover:not(:disabled){background:#f3faf8;border-color:#9bcfc5}
+.demo-login-account:focus-visible{outline:0;border-color:#77bdb5;box-shadow:0 0 0 3px #e6f4f2}
+.demo-login-account:disabled{opacity:.6;cursor:wait}
+.demo-login-account>span{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;flex:1}
+.demo-login-account strong{font-size:10px;font-weight:700;white-space:nowrap}
+.demo-login-account small{min-width:0;overflow:hidden;color:#778783;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.demo-login-account>svg{flex:none;color:var(--teal)}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .login-switch{margin:18px 0 0;text-align:center;font-size:11px;color:#687774}
 .login-switch .text-link{font-size:11px}
@@ -375,3 +390,32 @@
 .credential-card h2{margin:0 0 10px}
 .credential-card p{line-height:1.5}
 .credential-card .detail-list{margin:18px 0;overflow-wrap:anywhere}
+
+.user-management-search{padding:16px 18px}
+.user-management-search>label,.patient-access-search>label{display:block;margin:0 0 7px;color:#52615e;font-size:11px;font-weight:600}
+.user-management-search .search-field,.patient-access-search .search-field{width:min(420px,100%)}
+.patient-access-backdrop{position:fixed;inset:0;z-index:105;display:grid;place-items:center;padding:20px;background:rgba(10,25,23,.48);animation:modal-fade .16s ease-out}
+.patient-access-dialog{display:flex;flex-direction:column;width:min(680px,100%);max-height:min(760px,calc(100vh - 40px));overflow:hidden;background:#fff;border:1px solid rgba(219,228,225,.9);border-radius:14px;box-shadow:0 28px 70px rgba(22,41,38,.3);animation:modal-pop .18s ease-out}
+.patient-access-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:20px 22px;border-bottom:1px solid var(--line)}
+.patient-access-header h2{margin:5px 0;font:800 20px "Manrope";letter-spacing:-.4px;color:#20322f}
+.patient-access-header p{margin:0;color:var(--muted);font-size:11px;line-height:1.5}
+.patient-access-header .icon-btn{flex:none}
+.patient-access-content{display:grid;gap:20px;padding:20px 22px;overflow-y:auto}
+.patient-access-section h3{margin:0 0 10px;color:#354843;font-size:12px}
+.patient-access-empty{margin:0;padding:12px;border:1px dashed #dfe8e5;border-radius:8px;color:#778783;font-size:11px;text-align:center}
+.patient-access-list{display:grid;gap:7px;max-height:220px;overflow:auto;margin:0;padding:0;list-style:none}
+.patient-access-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;padding:9px 11px;border:1px solid #e5ece9;border-radius:8px;background:#fbfdfc}
+.patient-access-list li>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.patient-access-list li strong{overflow:hidden;color:#354843;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.patient-access-list li small{color:#778783;font-size:10px}
+.patient-access-list li .primary-btn,.patient-access-list li .secondary-btn{height:auto;min-height:34px;max-width:190px;padding:6px 10px;font-size:10px;white-space:normal}
+.patient-access-search .search-field{height:40px}
+.patient-access-search .search-field input{font-size:12px}
+
+@media(max-width:560px){
+  .patient-access-backdrop{padding:10px}
+  .patient-access-dialog{max-height:calc(100vh - 20px)}
+  .patient-access-header,.patient-access-content{padding:16px}
+  .patient-access-list li{align-items:flex-start}
+  .patient-access-list li .primary-btn,.patient-access-list li .secondary-btn{max-width:145px}
+}

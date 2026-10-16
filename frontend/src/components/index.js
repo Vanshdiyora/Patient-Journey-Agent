@@ -1,4 +1,4 @@
-export { AlertBanner, Badge, EmptyState, ErrorState, JsonView, MetricCard, PageHeading, Pagination, Panel, TabBar } from "./ui";
+export { AlertBanner, Badge, EmptyState, ErrorState, MetricCard, PageHeading, Pagination, Panel, TabBar } from "./ui";
 export { default as Brand } from "./Brand";
 export { SkeletonRows, DetailSkeleton } from "./Skeletons";
 export { default as Select } from "./Select";

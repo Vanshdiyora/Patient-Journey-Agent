@@ -59,7 +59,6 @@ export function ActionsPanel({ actionRows, loading, error, busy, onDecide, offse
       {a.response_payload?.delivery && a.status === "SUCCESS" && <small className="journey-action-delivery">
         {a.response_payload.delivery === "email" ? "Delivered by email" : a.response_payload.delivery === "in_app" ? "Created as an in-app task" : "Simulated - email is not configured"}
       </small>}
-      {a.response_payload && <details className="run-json"><summary>Execution response</summary><pre>{JSON.stringify(a.response_payload, null, 2)}</pre></details>}
       {a.error_message && <p className="form-error">{a.error_message}</p>}
     </div>)}</div> : <EmptyState small title="No actions recorded" text="Orchestration may decide to wait or escalate without executing an action." />}
     {!loading && !error && <Pagination offset={offset} count={actionRows.length} total={total ?? 0} onPage={onPage} />}

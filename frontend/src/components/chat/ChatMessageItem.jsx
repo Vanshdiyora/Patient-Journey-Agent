@@ -335,9 +335,6 @@ export default function ChatMessageItem({ message, user, onNavigate, busy, onCon
             {!description?.patient && description?.patient_reference && (
               <div className="chat-action-args">Patient reference: {description.patient_reference}</div>
             )}
-            {Object.keys(pending.arguments || {}).length > 0 && (
-              <div className="chat-action-args">Exact parameters: <code>{JSON.stringify(pending.arguments)}</code></div>
-            )}
             {!description?.patient && !description?.patient_reference && prettyArgs(pending.arguments) && (
               <div className="chat-action-args">{prettyArgs(pending.arguments)}</div>
             )}

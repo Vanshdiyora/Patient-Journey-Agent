@@ -20,11 +20,6 @@ const ACTION_LABELS = {
   CREATE_COORDINATOR_TASK: "Coordinator task",
 };
 
-function JsonDetails({ title, value, defaultOpen = false }) {
-  if (value == null || (Array.isArray(value) && !value.length)) return null;
-  return <details className="run-json" open={defaultOpen || undefined}><summary>{title}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>;
-}
-
 function StepChanges({ changes }) {
   return <div className="run-section">
     <h4>Steps changed by this run</h4>
@@ -58,7 +53,6 @@ function ActionOutcome({ item }) {
     {a.awaiting_approval && <p className="run-note">Approve or reject it under "Journey actions" on this page.</p>}
     {a.step_completion_note && <p className="run-note">{a.step_completed ? "Step completed. " : "Step not changed. "}{a.step_completion_note}</p>}
     {a.error && <p className="form-error">{a.error}</p>}
-    <JsonDetails title="Execution response" value={a.response} />
   </div>;
 }
 
@@ -101,8 +95,6 @@ export default function AgentRunDetails({ run }) {
       {out.next_capability && <p><b>Direction:</b> {humanize(out.next_capability)}{out.target_step_name ? ` - ${out.target_step_name}` : ""}</p>}
       {out.action_type && <p><b>Suggested action:</b> {humanize(out.action_type)}</p>}
       {out.assessment && <p><b>Assessment:</b> {out.assessment}</p>}
-      <JsonDetails title="Full agent output" value={run.output} />
-      <JsonDetails title="Input context" value={run.input_context} />
     </div>;
   }
 
@@ -140,15 +132,13 @@ export default function AgentRunDetails({ run }) {
       {finalState === "ESCALATE" && <p className="run-warning"><AlertTriangle size={13} /> An exception was opened for staff on the Exceptions page.</p>}
     </>}
 
-    {calls.length > 0 && <details className="run-json"><summary>How the run proceeded ({calls.length} steps)</summary>
+    {calls.length > 0 && <details className="run-trace"><summary>How the run proceeded ({calls.length} steps)</summary>
       <ol className="run-trace-list">{calls.map((call, index) => <li key={index}>
         <strong>{componentName(call.component)}</strong>
         <span>{traceText(call)}</span>
         {call.reason && call.operation !== "ai_unavailable" && <small>{call.reason}</small>}
       </li>)}</ol>
     </details>}
-    <JsonDetails title="Technical details (JSON)" value={{ decision, result: output.result, calls }} />
-    {saved && <JsonDetails title="Input context" value={run.input_context} />}
     <p className="run-boundary">Operational support only. Patient messages are emailed when SMTP is configured, otherwise simulated; staff should verify follow-up.</p>
   </div>;
 }

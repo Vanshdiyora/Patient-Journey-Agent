@@ -63,10 +63,19 @@ export default function Dashboard() {
     />
 
     <section className="metric-grid" aria-label="Dashboard metrics" aria-busy={loading}>
-      {(loading ? Array.from({ length: 4 }) : metricsFor(user, d)).map((metric, index) =>
+      {(loading ? Array.from({ length: 4 }, () => null) : metricsFor(user, d)).map((metric, index) =>
         metric
           ? <MetricCard key={index} {...metric} />
-          : <div className="metric-card" key={index} />
+          : (
+            <div className="metric-card metric-card--loading" key={index} aria-hidden="true">
+              <i className="metric-skeleton-icon" />
+              <span className="metric-skeleton-copy">
+                <i className="metric-skeleton-label" />
+                <i className="metric-skeleton-value" />
+                <i className="metric-skeleton-hint" />
+              </span>
+            </div>
+          )
       )}
     </section>
 

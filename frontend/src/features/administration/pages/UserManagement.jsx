@@ -1,5 +1,6 @@
-import React, { useCallback, useState } from "react";
-import { Plus, ShieldCheck, UserCog } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Plus, Search, ShieldCheck, UserCog, X } from "lucide-react";
 import { adminApi, patientsApi } from "../../../services/index";
 import { useAsync } from "../../../hooks/useAsync";
 import { getErrorMessage, humanize, toList } from "../../../utils/index";
@@ -18,6 +19,8 @@ export default function UserManagement() {
   const [saving, setSaving] = useState("");
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [patientSearch, setPatientSearch] = useState("");
+  const accessCloseButton = useRef(null);
+  const accessReturnFocus = useRef(null);
   const [staffDrawerOpen, setStaffDrawerOpen] = useState(false);
   const closeStaffDrawer = useCallback(() => setStaffDrawerOpen(false), []);
   const [assignmentRefresh, setAssignmentRefresh] = useState(0);
@@ -32,6 +35,47 @@ export default function UserManagement() {
   const [feedback, setFeedback] = useState(null);
   const [confirm, confirmModal] = useConfirm();
   const toast = useToast();
+
+  useEffect(() => {
+    if (!selectedStaff) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    accessCloseButton.current?.focus();
+    const onKeyDown = event => {
+      if (document.querySelector(".modal-backdrop")) return;
+      if (event.key === "Escape") {
+        setSelectedStaff(null);
+        setPatientSearch("");
+        return;
+      }
+      if (event.key !== "Tab") return;
+      if (!document.querySelector(".patient-access-dialog")?.contains(document.activeElement)) return;
+      const focusable = [...document.querySelectorAll(
+        ".patient-access-dialog button:not([disabled]), .patient-access-dialog input:not([disabled])",
+      )];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      accessReturnFocus.current?.focus();
+    };
+  }, [selectedStaff]);
+
+  const closePatientAccess = () => {
+    setSelectedStaff(null);
+    setPatientSearch("");
+  };
 
   const setRole = async (u, role) => {
     if (role === u.role) return;
@@ -121,7 +165,13 @@ export default function UserManagement() {
     />
     {staffDrawerOpen && <StaffCreateDrawer onClose={closeStaffDrawer} onCreated={staffCreated} />}
     <Panel title="Application users" subtitle={`${data?.total ?? users.length} registered identities`} headerIcon={UserCog}>
-      <div style={{ padding: 18 }}><label>Find a user<input value={userSearch} onChange={event => { setUserSearch(event.target.value); setOffset(0); }} placeholder="Search doctor name or email" /></label></div>
+      <div className="user-management-search">
+        <label htmlFor="user-management-search">Find a user</label>
+        <div className="search-field">
+          <Search size={15} aria-hidden="true" />
+          <input id="user-management-search" type="search" value={userSearch} onChange={event => { setUserSearch(event.target.value); setOffset(0); }} placeholder="Search doctor name or email" />
+        </div>
+      </div>
       {feedback && <div style={{ padding: "0 18px" }}><AlertBanner tone={feedback.tone}>{feedback.text}</AlertBanner></div>}
       {error ? <ErrorState error={error} title="Could not load users" /> :
         loading ? <SkeletonRows /> :
@@ -146,7 +196,17 @@ export default function UserManagement() {
                   <td><Badge kind="status" value={u.is_active ? "active" : "cancelled"} fallback={u.is_active ? "Active" : "Inactive"} /></td>
                   <td>
                     {(u.role === ROLES.CLINICIAN || u.role === ROLES.CARE_COORDINATOR) && (
-                      <button className="secondary-btn" onClick={() => setSelectedStaff(u)}>Patient access</button>
+                      <button
+                        className="secondary-btn"
+                        type="button"
+                        onClick={event => {
+                          accessReturnFocus.current = event.currentTarget;
+                          setPatientSearch("");
+                          setSelectedStaff(u);
+                        }}
+                      >
+                        Patient access
+                      </button>
                     )}
                     <button className="secondary-btn" disabled={saving === u.id} onClick={() => toggleActive(u)}>
                       {u.is_active ? "Deactivate" : "Reactivate"}
@@ -158,23 +218,106 @@ export default function UserManagement() {
           ) : <EmptyState icon={ShieldCheck} title="No users" text="No identities are registered yet." />}
       {!loading && !error && <Pagination offset={offset} count={users.length} total={data?.total ?? 0} onPage={setOffset} />}
     </Panel>
-    {selectedStaff && <Panel title={`Patient access: ${selectedStaff.display_name || selectedStaff.email}`} subtitle="Clinical and coordination staff can see only assigned patients.">
-      <div style={{ padding: 18 }}>
-        <button className="secondary-btn" onClick={() => setSelectedStaff(null)}>Close</button>
-        <p>Assigned patients</p>
-        {assignmentsLoading ? <SkeletonRows /> : (assignments?.patients || []).length ? (
-          <ul>{assignments.patients.map(patient => <li key={patient.id}>{patient.name} ({patient.reference}) {selectedStaff.role !== ROLES.CLINICIAN && <button className="secondary-btn" disabled={saving === patient.id} onClick={() => changeAssignment(patient.id, false)}>Remove access</button>}</li>)}</ul>
-        ) : <p>No patients assigned.</p>}
-        <label>Find a patient to assign<input value={patientSearch} onChange={e => setPatientSearch(e.target.value)} placeholder="Search name or reference" /></label>
-        {patientSearch.trim() && <ul>{toList(matchingPatients, "items", "patients").map(patient => (
-          <li key={patient.id}>{patient.first_name} {patient.last_name} ({patient.patient_reference}){" "}
-            <button className="secondary-btn" disabled={saving === patient.id || (assignments?.patient_ids || []).includes(patient.id) || (selectedStaff.role === ROLES.CLINICIAN && Boolean(patient.assigned_clinician_id))} onClick={() => changeAssignment(patient.id, true)}>
-              {(assignments?.patient_ids || []).includes(patient.id) ? "Assigned" : selectedStaff.role === ROLES.CLINICIAN && patient.assigned_clinician_id ? "Already assigned to a doctor" : "Grant access"}
+    {selectedStaff && createPortal(
+      <div
+        className="patient-access-backdrop"
+        onMouseDown={event => {
+          if (event.target === event.currentTarget) closePatientAccess();
+        }}
+      >
+        <section
+          className="patient-access-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="patient-access-title"
+          aria-describedby="patient-access-description"
+        >
+          <header className="patient-access-header">
+            <div>
+              <span className="eyebrow">User management</span>
+              <h2 id="patient-access-title">Patient access</h2>
+              <p id="patient-access-description">
+                Manage patients assigned to {selectedStaff.display_name || selectedStaff.email}.
+              </p>
+            </div>
+            <button
+              ref={accessCloseButton}
+              className="icon-btn"
+              type="button"
+              aria-label="Close patient access dialog"
+              onClick={closePatientAccess}
+            >
+              <X size={18} />
             </button>
-          </li>
-        ))}</ul>}
-      </div>
-    </Panel>}
+          </header>
+          <div className="patient-access-content">
+            <section className="patient-access-section" aria-labelledby="assigned-patients-title">
+              <h3 id="assigned-patients-title">Assigned patients</h3>
+              {assignmentsLoading ? <SkeletonRows /> : (assignments?.patients || []).length ? (
+                <ul className="patient-access-list">
+                  {assignments.patients.map(patient => (
+                    <li key={patient.id}>
+                      <span><strong>{patient.name}</strong><small>{patient.reference}</small></span>
+                      {selectedStaff.role !== ROLES.CLINICIAN && (
+                        <button
+                          className="secondary-btn"
+                          type="button"
+                          disabled={saving === patient.id}
+                          onClick={() => changeAssignment(patient.id, false)}
+                        >
+                          {saving === patient.id ? "Removing…" : "Remove access"}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="patient-access-empty">No patients assigned.</p>}
+            </section>
+            <section className="patient-access-section" aria-labelledby="find-patient-title">
+              <h3 id="find-patient-title">Add a patient</h3>
+              <div className="patient-access-search">
+                <label htmlFor="patient-access-search">Search by name or reference</label>
+                <div className="search-field">
+                  <Search size={15} aria-hidden="true" />
+                  <input
+                    id="patient-access-search"
+                    type="search"
+                    value={patientSearch}
+                    onChange={event => setPatientSearch(event.target.value)}
+                    placeholder="Search name or reference"
+                  />
+                </div>
+              </div>
+              {patientSearch.trim() && (
+                <ul className="patient-access-list patient-access-results">
+                  {toList(matchingPatients, "items", "patients").map(patient => {
+                    const alreadyAssigned = (assignments?.patient_ids || []).includes(patient.id);
+                    const alreadyHasClinician = selectedStaff.role === ROLES.CLINICIAN && Boolean(patient.assigned_clinician_id);
+                    return (
+                      <li key={patient.id}>
+                        <span>
+                          <strong>{patient.first_name} {patient.last_name}</strong>
+                          <small>{patient.patient_reference}</small>
+                        </span>
+                        <button
+                          className={alreadyAssigned ? "secondary-btn" : "primary-btn"}
+                          type="button"
+                          disabled={saving === patient.id || alreadyAssigned || alreadyHasClinician}
+                          onClick={() => changeAssignment(patient.id, true)}
+                        >
+                          {saving === patient.id ? "Adding…" : alreadyAssigned ? "Assigned" : alreadyHasClinician ? "Already assigned to a doctor" : "Grant access"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+        </section>
+      </div>,
+      document.body,
+    )}
     {confirmModal}
   </div>;
 }
