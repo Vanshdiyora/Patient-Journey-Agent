@@ -4,6 +4,7 @@ import { formatDate, getErrorMessage, humanize } from "../../../utils/index";
 import { EmptyState, Panel, SkeletonRows } from "../../../components/index";
 import { phaseLabel, stepPhase } from "../../../utils/timeline";
 import { formatDurationHours, milestoneLabel } from "../../../utils/duration";
+import StepBooking from "../../../components/StepBooking";
 
 function CarePlanStep({ step, index, comments, setComments, busyStepId, onSubmitStep }) {
   const patientOwned = String(step.owner_role || "").toUpperCase() === "PATIENT";
@@ -24,6 +25,7 @@ function CarePlanStep({ step, index, comments, setComments, busyStepId, onSubmit
         {step.description && <span className="timeline-sub">{step.description}</span>}
         {step.owner_role && <span className="timeline-sub">Responsible: {humanize(step.owner_role)}</span>}
         <div className="timeline-dates">
+          <StepBooking step={step} />
           {step.planned_due_at && <span>Pathway target: {milestoneLabel(step.due_after_days)} · {formatDate(step.planned_due_at)}</span>}
           {completed && step.completed_at && <span>Completed {formatDate(step.completed_at, true)}</span>}
           {!completed && step.started_at && <span>Started {formatDate(step.started_at, true)}</span>}

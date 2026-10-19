@@ -15,14 +15,26 @@ export function ConfirmModal({
   open, title, message, confirmLabel = "Confirm", cancelLabel = "Cancel",
   intent = "primary", busy = false, onConfirm, onCancel,
 }) {
+  const cardRef = useRef(null);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => { if (e.key === "Escape" && !busy) onCancel(); };
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    cardRef.current?.querySelector("button")?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape" && !busy) onCancel();
+      if (e.key !== "Tab") return;
+      const buttons = [...cardRef.current.querySelectorAll("button:not([disabled])")];
+      const first = buttons[0], last = buttons[buttons.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [open, busy, onCancel]);
 
@@ -30,7 +42,7 @@ export function ConfirmModal({
 
   return (
     <div className="modal-backdrop" onClick={() => !busy && onCancel()}>
-      <div className="modal-card" role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+      <div ref={cardRef} className="modal-card" role="alertdialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
         <div className={`modal-icon modal-icon--${intent}`}>
           {intent === "danger" ? <AlertTriangle size={22} /> : <HelpCircle size={22} />}
         </div>

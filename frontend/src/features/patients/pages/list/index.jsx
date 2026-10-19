@@ -4,16 +4,23 @@ import { Link, useNavigate } from "react-router-dom";
 import { adminApi, patientsApi } from "../../../../services/index";
 import { useAsync } from "../../../../hooks/useAsync";
 import { useTabs } from "../../../../hooks/useTabs";
-import { formatDate, getErrorMessage, initials } from "../../../../utils/index";
-import { isAdmin, isCoordinator, portalName } from "../../../../utils/roles";
+import { formatDate, initials } from "../../../../utils/index";
+import { isAdmin, isCoordinator, isPatient, portalName } from "../../../../utils/roles";
 import { useAuth } from "../../../../context/AuthContext";
 import { useToast } from "../../../../context/ToastContext";
 import { PageHeading, Panel, EmptyState, ErrorState, Pagination, SearchBox, SkeletonRows, TabBar } from "../../../../components/index";
 import { TABS_BY_ROLE } from "./tabs";
 import PatientCreateDrawer from "./PatientCreateDrawer";
 import DoctorAssignDrawer from "./DoctorAssignDrawer";
+import PatientDetail from "../PatientDetail";
 
 export default function Patients() {
+  const { user } = useAuth();
+  if (isPatient(user)) return user.patient_id ? <PatientDetail profileId={user.patient_id} /> : <EmptyState title="Patient profile unavailable" text="Ask your care team to link your patient account." />;
+  return <StaffPatients />;
+}
+
+function StaffPatients() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const tabs = TABS_BY_ROLE[String(user?.role || "").toUpperCase()] || TABS_BY_ROLE.ADMIN;
@@ -24,7 +31,6 @@ export default function Patients() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [credentials, setCredentials] = useState(null);
   const [doctorAssignPatient, setDoctorAssignPatient] = useState(null);
-  const [claimingId, setClaimingId] = useState(null);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const closeDoctorAssign = useCallback(() => setDoctorAssignPatient(null), []);
   const toast = useToast();
@@ -53,23 +59,9 @@ export default function Patients() {
     toast.success("Doctor assigned to this patient.");
   };
 
-  const claimPatient = async patientId => {
-    if (claimingId) return;
-    setClaimingId(patientId);
-    try {
-      await patientsApi.claim(patientId);
-      toast.success("Patient assigned to you. You can now open their profile.");
-    } catch (cause) {
-      toast.error(getErrorMessage(cause));
-    } finally {
-      setRefresh(value => value + 1);
-      setClaimingId(null);
-    }
-  };
-
   return <div>
     <PageHeading eyebrow={portalName(user)} title={isCoordinator(user) ? "Patient follow-ups" : "Patients"}
-      description={isAdmin(user) ? "View patients and their assigned clinicians." : isCoordinator(user) ? "Patients needing coordination follow-up." : "Browse patients, claim an unassigned patient, and follow those in your care."}
+      description={isAdmin(user) ? "View patients and their assigned clinicians." : isCoordinator(user) ? "Follow up with patients assigned to you." : "View and follow patients explicitly assigned to you."}
       actions={isAdmin(user) && <button className="primary-btn" type="button" onClick={() => setDrawerOpen(true)}><Plus size={16} /> Create patient</button>} />
     {drawerOpen && <PatientCreateDrawer clinicians={clinicians} cliniciansError={cliniciansError} onClose={closeDrawer} onCreated={patientCreated} />}
     {doctorAssignPatient && <DoctorAssignDrawer patient={doctorAssignPatient} onClose={closeDoctorAssign} onAssigned={doctorAssigned} />}
@@ -95,19 +87,18 @@ export default function Patients() {
         <div className="table-wrap"><table>
           <thead><tr><th>Patient</th><th>Reference</th><th>Date of birth</th><th>Doctor</th><th>{isClinician || isAdmin(user) ? "Action" : "Profile"}</th></tr></thead>
           <tbody>{patients.map(p => {
-            const canOpenProfile = !isClinician || p.assigned_clinician_id === user?.id;
             const profilePath = `/patients/${p.id}`;
             return (
-            <tr key={p.id} className={canOpenProfile ? "patient-row--open" : undefined}
-              onClick={canOpenProfile ? event => {
+            <tr key={p.id} className="patient-row--open"
+              onClick={event => {
                 if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey &&
                     !event.target.closest("a, button, input, select, textarea")) navigate(profilePath);
-              } : undefined}>
-              <td><div className="person-cell"><div className="person-avatar">{initials(p.first_name, p.last_name)}</div><div>{canOpenProfile ? <Link className="table-primary" to={profilePath}>{p.first_name} {p.last_name}</Link> : <strong className="table-primary">{p.first_name} {p.last_name}</strong>}<span>Patient record</span></div></div></td>
+              }}>
+              <td><div className="person-cell"><div className="person-avatar">{initials(p.first_name, p.last_name)}</div><div><Link className="table-primary" to={profilePath}>{p.first_name} {p.last_name}</Link><span>Patient record</span></div></div></td>
               <td><code>{p.patient_reference}</code></td>
               <td>{formatDate(p.date_of_birth)}</td>
               <td>{p.assigned_clinician_id ? <div className="patient-assignment"><span>{p.assigned_clinician_name || "Assigned doctor"}</span><span className="patient-assignment-tag">Assigned</span></div> : <span className="patient-unassigned">Unassigned</span>}</td>
-              <td>{canOpenProfile ? <div className="patient-row-actions"><Link className="table-link" to={profilePath}>Open profile</Link>{isAdmin(user) && !p.assigned_clinician_id && <button className="secondary-btn patient-claim-btn" type="button" onClick={() => setDoctorAssignPatient(p)}>Assign doctor</button>}</div> : isClinician && !p.assigned_clinician_id ? <button className="secondary-btn patient-claim-btn" type="button" disabled={Boolean(claimingId)} onClick={() => claimPatient(p.id)}>{claimingId === p.id ? "Assigning…" : "Assign to me"}</button> : <span className="patient-assignment-muted">Assigned to another doctor</span>}</td>
+              <td><div className="patient-row-actions"><Link className="table-link" to={profilePath}>Open profile</Link>{isAdmin(user) && !p.assigned_clinician_id && <button className="secondary-btn patient-claim-btn" type="button" onClick={() => setDoctorAssignPatient(p)}>Assign doctor</button>}</div></td>
             </tr>
           ); })}</tbody>
         </table></div>

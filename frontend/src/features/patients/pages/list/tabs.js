@@ -14,10 +14,9 @@ export const TABS_BY_ROLE = {
     { id: "has_exceptions", label: "With exceptions", icon: AlertTriangle },
     { id: "active", label: "Active journeys" },
   ],
-  // Clinician: the directory plus patients in this clinician's care.
+  // Every clinician tab stays within the authenticated clinician's assignments.
   CLINICIAN: [
-    { id: "", label: "All patients" },
-    { id: "mine", label: "My patients" },
+    { id: "", label: "My patients" },
     { id: "blocked", label: "Blocked care" },
   ],
   // Coordinator: coordination queue oriented slices.

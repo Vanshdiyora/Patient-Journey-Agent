@@ -8,6 +8,7 @@ export const PATHS = {
   account: "/account",
   myJourney: "/my-journey",
   patients: "/patients",
+  calendar: "/calendar",
   patientDetail: "/patients/:patientId",
   journeys: "/journeys",
   journeyDetail: "/journeys/:journeyId",

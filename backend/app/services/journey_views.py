@@ -2,7 +2,7 @@
 from datetime import timedelta
 from sqlalchemy.orm import Session
 
-from app.models import Journey, JourneyStep, Pathway, PathwayStep, PatientEvent
+from app.models import Journey, JourneyStep, Pathway, PathwayStep, PatientEvent, User
 from app.schemas.journey import JourneyResponse, JourneyStepResponse
 
 
@@ -31,6 +31,8 @@ def steps_with_pathway_details(db: Session, journey_id) -> list[dict]:
         .all()
     )
     step_ids = {step.id for step, _template in rows}
+    staff_ids = {step.scheduled_staff_id for step, _ in rows if step.scheduled_staff_id}
+    staff_names = dict(db.query(User.id, User.display_name).filter(User.id.in_(staff_ids)).all()) if staff_ids else {}
     pending_step_ids = {
         event.payload.get("journey_step_id")
         for event in db.query(PatientEvent)
@@ -46,6 +48,7 @@ def steps_with_pathway_details(db: Session, journey_id) -> list[dict]:
         {
             **JourneyStepResponse.model_validate(step).model_dump(),
             "name": template.name,
+            "scheduled_staff_name": staff_names.get(step.scheduled_staff_id),
             "description": template.description,
             "sequence_number": template.sequence_number,
             "owner_role": step.owner_role or template.owner_role or "CLINICIAN",

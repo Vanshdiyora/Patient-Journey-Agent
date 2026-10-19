@@ -20,6 +20,7 @@ const UserManagement = lazy(() => import("../features/administration/pages/UserM
 const Pathways = lazy(() => import("../features/pathways/pages/index"));
 const MyJourney = lazy(() => import("../features/patient-portal/pages/index"));
 const Account = lazy(() => import("../features/authentication/pages/Account"));
+const Calendar = lazy(() => import("../features/calendar/pages/index"));
 const Forbidden = lazy(() => import("../pages/Forbidden"));
 const NotFound = lazy(() => import("../pages/NotFound"));
 
@@ -40,9 +41,10 @@ export default function AppRoutes() {
             </Route>
             <Route path={PATHS.myJourney} element={<MyJourney />} />
             <Route path={PATHS.account} element={<Account />} />
+            <Route path={PATHS.calendar} element={<Calendar />} />
+            <Route path={PATHS.patients} element={<Patients />} />
+            <Route path={PATHS.patientDetail} element={<PatientDetail />} />
             <Route element={<StaffRoute />}>
-              <Route path={PATHS.patients} element={<Patients />} />
-              <Route path={PATHS.patientDetail} element={<PatientDetail />} />
               <Route path={PATHS.journeys} element={<Journeys />} />
               <Route path={PATHS.journeyDetail} element={<JourneyDetail />} />
               <Route path={PATHS.exceptions} element={<Exceptions />} />

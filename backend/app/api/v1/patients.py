@@ -1,16 +1,16 @@
-from uuid import UUID, uuid4
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.core.authorization import require_staff, scope_patient_ids
-from app.models import Patient, Journey, Pathway, ExceptionRecord, User, StaffPatientAssignment
+from app.models import Patient, Journey, JourneyStep, Pathway, ExceptionRecord, User
 from app.schemas import PatientResponse, JourneyResponse
 from app.schemas.journey import JourneyCreate
 from app.services.journey_views import journey_with_pathway, journeys_with_pathways
 from app.services.journey_service import ACTIVE_JOURNEY_STATUSES, start_journey_for_patient
 from app.services.patient_search import patient_search_condition
-from app.services.chat_service import audit
 
 router = APIRouter()
 
@@ -50,24 +50,17 @@ def list_patients(
     limit: int = Query(10, ge=1, le=10),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    user=Depends(require_staff),
+    user=Depends(get_current_user),
 ):
     if filter and filter not in VALID_FILTERS:
         raise HTTPException(422, f"filter must be one of: {', '.join(VALID_FILTERS)}")
     if filter == "mine" and user.role != "CLINICIAN":
         raise HTTPException(422, "The My patients filter is for clinicians only")
     q = db.query(Patient)
-    if user.role == "CLINICIAN":
-        # All patients is a limited directory. Care filters show only patients
-        # this clinician is responsible for; detail/journey routes stay scoped.
-        if filter:
-            q = q.filter(Patient.assigned_clinician_id == user.id)
-        directory_scope = "directory" if not filter else "assigned"
-    else:
-        patient_ids = scope_patient_ids(db, user)
-        if patient_ids is not None:
-            q = q.filter(Patient.id.in_(patient_ids))
-        directory_scope = "all" if patient_ids is None else "assigned"
+    patient_ids = scope_patient_ids(db, user)
+    if patient_ids is not None:
+        q = q.filter(Patient.id.in_(patient_ids))
+    directory_scope = "all" if patient_ids is None else "own" if user.role == "PATIENT" else "assigned"
     q = _apply_directory_filter(q, db, filter)
     if search:
         q = q.filter(patient_search_condition(search))
@@ -78,10 +71,6 @@ def list_patients(
     items = []
     for patient in rows:
         item = PatientResponse.model_validate(patient).model_dump(mode="json")
-        # Unassigned and other clinicians' patients appear in the directory,
-        # without exposing contact details to a clinician who does not care for them.
-        if user.role == "CLINICIAN" and patient.assigned_clinician_id != user.id:
-            item["email"] = None
         item["assigned_clinician_name"] = clinicians.get(patient.assigned_clinician_id)
         items.append(item)
     return {
@@ -96,31 +85,12 @@ def list_patients(
 
 @router.post("/patients/{patient_id}/claim")
 def claim_patient(patient_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
-    """Let a clinician claim one unassigned patient, without reassignment."""
-    if user.role != "CLINICIAN":
-        raise HTTPException(403, "Only a clinician can claim an unassigned patient")
-    patient = db.query(Patient).filter(Patient.id == patient_id).with_for_update().first()
-    if patient is None:
-        raise HTTPException(404, "Patient not found")
-    if patient.assigned_clinician_id is not None:
-        raise HTTPException(409, "This patient already has an assigned clinician")
-    patient.assigned_clinician_id = user.id
-    db.add(StaffPatientAssignment(staff_user_id=user.id, patient_id=patient_id,
-                                  assigned_by_user_id=user.id))
-    audit(db, user=user, tool_name="claim_patient", event="executed",
-          target_entity="patient", target_entity_id=patient_id,
-          parameters={"patient_id": str(patient_id)}, correlation_id=uuid4(),
-          result_status="success")
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(409, "This patient could not be assigned. Reload and try again") from exc
-    return {"patient_id": str(patient_id), "clinician_id": str(user.id), "assigned": True}
+    """Legacy route: staff cannot grant themselves access to arbitrary patients."""
+    raise HTTPException(403, "Patient access must be assigned by an administrator")
 
 
 @router.get("/patients/{patient_id}", response_model=PatientResponse)
-def get_patient(patient_id: UUID, db: Session = Depends(get_db), user=Depends(require_staff)):
+def get_patient(patient_id: UUID, db: Session = Depends(get_db), user=Depends(get_current_user)):
     q = db.query(Patient).filter(Patient.id == patient_id)
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None:
@@ -135,7 +105,7 @@ def get_patient(patient_id: UUID, db: Session = Depends(get_db), user=Depends(re
 
 
 @router.get("/patients/{patient_id}/journeys")
-def patient_journeys(patient_id: UUID, limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user=Depends(require_staff)):
+def patient_journeys(patient_id: UUID, limit: int = Query(10, ge=1, le=10), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user=Depends(get_current_user)):
     patient_ids = scope_patient_ids(db, user)
     if patient_ids is not None and patient_id not in patient_ids:
         raise HTTPException(404, "Patient not found")
@@ -144,7 +114,18 @@ def patient_journeys(patient_id: UUID, limit: int = Query(10, ge=1, le=10), offs
     q = db.query(Journey).filter(Journey.patient_id == patient_id)
     journeys = q.order_by(Journey.started_at.desc(), Journey.id.desc()).offset(offset).limit(limit).all()
     has_active_journey = q.filter(Journey.status.in_(ACTIVE_JOURNEY_STATUSES)).first() is not None
-    return {"items": journeys_with_pathways(db, journeys), "total": q.count(), "limit": limit, "offset": offset,
+    items = journeys_with_pathways(db, journeys)
+    counts = {}
+    for journey_id, status, count in db.query(JourneyStep.journey_id, JourneyStep.status, func.count(JourneyStep.id)).filter(
+        JourneyStep.journey_id.in_([j.id for j in journeys])
+    ).group_by(JourneyStep.journey_id, JourneyStep.status).all():
+        progress = counts.setdefault(journey_id, {"completed": 0, "total": 0})
+        progress["total"] += count
+        if status == "COMPLETED":
+            progress["completed"] += count
+    for item in items:
+        item["progress"] = counts.get(item["id"], {"completed": 0, "total": 0})
+    return {"items": items, "total": q.count(), "limit": limit, "offset": offset,
             "has_active_journey": has_active_journey}
 
 

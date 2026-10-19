@@ -9,7 +9,7 @@ import { useToast } from "../../../context/ToastContext";
 import { useAuth } from "../../../context/AuthContext";
 import DurationInput from "../../../components/DurationInput";
 import { milestoneLabel } from "../../../utils/duration";
-import { isAdmin } from "../../../utils/roles";
+import { isAdmin, isPatient } from "../../../utils/roles";
 import DoctorAssignDrawer from "./list/DoctorAssignDrawer";
 
 function Detail({ label, value }) {
@@ -19,17 +19,19 @@ function Detail({ label, value }) {
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const ACTIVE_JOURNEY_STATUSES = new Set(["ACTIVE", "BLOCKED"]);
 
-export default function PatientDetail() {
+export default function PatientDetail({ profileId } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isClinician = user?.role === "CLINICIAN";
   const canStartJourney = isClinician || isAdmin(user);
-  const { patientId } = useParams();
+  const params = useParams();
+  const patientId = profileId || params.patientId;
+  const journeyPath = id => isPatient(user) ? `/my-journey?journeyId=${id}` : `/journeys/${id}`;
   const [journeyOffset, setJourneyOffset] = useState(0);
   useEffect(() => { setJourneyOffset(0); }, [patientId]);
   const patient = useAsync(() => patientsApi.get(patientId), [patientId]);
   const journeys = useAsync(() => patientsApi.journeys(patientId, { limit: 10, offset: journeyOffset }), [patientId, journeyOffset]);
-  const pathways = useAsync(() => journeysApi.availablePathways(), []);
+  const pathways = useAsync(() => canStartJourney ? journeysApi.availablePathways() : Promise.resolve([]), [canStartJourney]);
   const toast = useToast();
   const [pathwayId, setPathwayId] = useState("");
   const [timeLimits, setTimeLimits] = useState({});
@@ -156,11 +158,11 @@ export default function PatientDetail() {
             <div className="journey-card journey-card--open" key={j.id}
               onClick={event => {
                 if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey &&
-                    !event.target.closest("a, button, form, input, select, textarea, label")) navigate(`/journeys/${j.id}`);
+                    !event.target.closest("a, button, form, input, select, textarea, label")) navigate(journeyPath(j.id));
               }}>
-              <Link className="journey-card-open" to={`/journeys/${j.id}`}>
+              <Link className="journey-card-open" to={journeyPath(j.id)}>
                 <div className="journey-card-icon"><Network size={20} /></div>
-                <div className="journey-card-main"><strong>{humanize(j.pathway_name || j.pathway_id || "Care pathway")}</strong><span>Started {formatDate(j.started_at)}</span></div>
+                <div className="journey-card-main"><strong>{humanize(j.pathway_name || j.pathway_id || "Care pathway")}</strong><span>Started {formatDate(j.started_at)}</span>{j.progress && <span>{j.progress.completed} / {j.progress.total} activities completed</span>}</div>
               </Link>
               <Badge kind="status" value={j.status} />
               {isClinician && ACTIVE_JOURNEY_STATUSES.has(j.status) ? <form className="journey-priority-form" onSubmit={event => savePriority(event, j)}>
@@ -169,7 +171,7 @@ export default function PatientDetail() {
                   options={PRIORITIES.map(value => ({ value, label: humanize(value) }))} /></label>
                 <button className="secondary-btn" type="submit" disabled={prioritySavingId === j.id || (priorityDrafts[j.id] || j.priority) === j.priority}>{prioritySavingId === j.id ? "Saving…" : "Save priority"}</button>
               </form> : <Badge kind="priority" value={j.priority} />}
-              <Link className="journey-card-arrow" to={`/journeys/${j.id}`} aria-label={`Open ${j.pathway_name || "care journey"}`}><ChevronRight size={18} /></Link>
+              <Link className="journey-card-arrow" to={journeyPath(j.id)} aria-label={`Open ${j.pathway_name || "care journey"}`}><ChevronRight size={18} /></Link>
             </div>
           ))}</div>
         ) : <EmptyState icon={ClipboardList} title="No journeys found" text="This patient has no associated journeys." />}

@@ -63,7 +63,8 @@ Backend authorization remains authoritative.
 ## Pages
 
 - Overview dashboard (role-specific KPIs)
-- Patients + patient profile (clinicians can browse all patients, filter their own and blocked care, and claim unassigned patients; administrators can create patients and assign doctors from the list or profile)
+- Patients + patient profile (administrators see all patients and manage assignments; clinicians and coordinators see only assigned patients; patients see their own profile and journey progress)
+- Calendar with day/week/month views, scoped search and filters, activity details, and confirmed staff booking/reschedule/cancel actions; patients have an own-schedule read view. See [calendar API guide](../backend/CALENDAR.md).
 - User management (administrators create staff accounts in a side drawer)
 - Patient profile journeys + journey detail
 - Administrators and assigned clinicians can start care journeys; only clinicians set or update priority, and starting another journey is disabled while care is active

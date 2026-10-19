@@ -72,10 +72,10 @@ active users. Each patient has a linked portal account. Step time limits are
 backfilled by the migrations. All demo passwords are `Test@123`, stored as
 bcrypt hashes. Hash generation can take several minutes.
 
-The setup assigns demo patients to their clinicians. Clinicians can browse the
-basic patient directory and claim an unassigned patient; they can open profiles
-and journeys only for patients assigned to them. Care coordinators see only
-patients granted to them in User management.
+The setup assigns demo patients to their clinicians. Clinicians can list and
+open only their assigned patients. Care coordinators see only patients granted
+to them in User management. Administrators manage assignments; staff cannot
+grant themselves patient access.
 
 Schema creation, migrations, seeding, and verification share one transaction;
 any failure rolls back the entire setup. The command refuses databases with
@@ -106,7 +106,11 @@ using a database migration account:
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261012_chat_access_and_audit.sql"
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261013_patient_provisioning_and_pathway_roles.sql"
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261014_refine_clinical_pathway_workflows.sql"
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261019_add_journey_calendar.sql"
 ```
+
+The [calendar guide](CALENDAR.md) describes calendar roles, endpoints, UTC booking
+storage, planned dates, and scheduling confirmations.
 
 The pathway migration publishes new versions of the six seeded care pathways,
 assigning role owners and operational step deadlines. Completed journeys retain
@@ -359,10 +363,10 @@ Public signup is disabled. Administrators create patients with an optional clini
 `POST /api/v1/admin/patients`; the temporary password appears once in the response.
 Patients change it through `POST /api/v1/auth/change-password`. Administrators
 create staff via `POST /api/v1/admin/users`. Existing patients can be assigned
-to a clinician with `PUT /api/v1/admin/users/{user_id}/patients/{patient_id}`;
-clinicians can also claim an unassigned patient with `POST /api/v1/patients/{patient_id}/claim`.
-The clinician directory shows all patients, while profile and journey access
-stays limited to assigned patients. Clinician assignments cannot be removed or changed. The assigned clinician
+to a clinician with `PUT /api/v1/admin/users/{user_id}/patients/{patient_id}`.
+Patient lists, profiles, journeys, and calendars are limited to assigned patients
+for clinicians and coordinators; patients can read only their own records.
+The legacy self-claim endpoint returns 403. Clinician assignments cannot be removed or changed. The assigned clinician
 starts journeys and chooses priority. Confirmations are signed for the user,
 session, exact action, patient, and parameters. The backend claims each proposal
 once and checks current role, patient grants, and business rules at execution.

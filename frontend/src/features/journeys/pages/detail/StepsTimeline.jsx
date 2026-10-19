@@ -6,6 +6,7 @@ import StepEvidenceForm from "./StepEvidenceForm";
 import { phaseLabel, stepPhase } from "../../../../utils/timeline";
 import { formatDurationHours, milestoneLabel } from "../../../../utils/duration";
 import DurationInput from "../../../../components/DurationInput";
+import StepBooking from "../../../../components/StepBooking";
 
 const COMPLETED_STATES = ["completed", "resolved"];
 const ROLE_PERMISSIONS = {
@@ -80,6 +81,7 @@ function TimelineItem({ step, index, onUpdateTimeLimit, onComplete, onAddEvidenc
           />
         )}
         <div className="timeline-dates">
+          <StepBooking step={step} />
           {step.planned_due_at && <span>Pathway target: {milestoneLabel(step.due_after_days)} · {formatDate(step.planned_due_at)}</span>}
           {isCompleted && step.completed_at && <span>Completed {formatDate(step.completed_at, true)}</span>}
           {!isCompleted && step.started_at && <span>Started {formatDate(step.started_at, true)}</span>}

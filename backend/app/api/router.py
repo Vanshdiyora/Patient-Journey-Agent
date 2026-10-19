@@ -3,11 +3,13 @@ from app.core.dependencies import get_current_user
 from app.auth import UserResponse, user_response
 from app.api.v1 import health, patients, journeys, events, exceptions, agents, actions, dashboard, me, admin, pathways
 from app.api.v1.chat import router as chat_router
+from app.api.v1.calendar import router as calendar_router
 from app.auth import router as auth_router
 api_router=APIRouter()
 api_router.include_router(auth_router, tags=["auth"])
 api_router.include_router(me.router, tags=["patient"])
 api_router.include_router(admin.router, tags=["admin"])
+api_router.include_router(calendar_router)
 api_router.include_router(pathways.router)
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(patients.router, tags=["patients"])
