@@ -2,8 +2,8 @@
 Role-based access control service.
 
 Centralizes every authorization decision:
-- Clinical and coordination staff can open details and journeys only for
-  assigned patients. Clinicians may browse a limited patient directory.
+- Clinical and coordination staff can list patients and open details and
+  journeys only for explicitly assigned patients.
 - PATIENT role users are bound to exactly one patient via users.patient_id and
   may only ever touch their own records.
 - Identity, role and patient link ALWAYS come from the authenticated DB user,

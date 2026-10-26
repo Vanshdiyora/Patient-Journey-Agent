@@ -45,6 +45,13 @@ def verify(cursor):
     cursor.execute("SELECT to_regclass('public.staff_patient_assignments')")
     if cursor.fetchone()[0] is None:
         raise RuntimeError("Staff patient assignment migration is missing")
+    cursor.execute("""
+        SELECT count(*) FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'journey_steps'
+        AND column_name IN ('scheduled_start_at', 'scheduled_end_at', 'scheduled_staff_id', 'schedule_status', 'schedule_revision')
+    """)
+    if cursor.fetchone()[0] != 5:
+        raise RuntimeError("Journey calendar migration is missing")
     cursor.execute("SELECT count(*) FROM pathway_steps WHERE owner_role = 'STAFF'")
     if cursor.fetchone()[0]:
         raise RuntimeError("Seed verification failed: generic pathway owner roles remain")

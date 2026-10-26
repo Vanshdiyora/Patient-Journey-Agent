@@ -11,9 +11,9 @@ Deterministic rules and verified actions control journey state; three optional A
 | --- | --- |
 | Frontend | React 19 and Vite 7 portals for administrators, clinicians, care coordinators, and patients; dashboard, journey views, pathway and user management, and chat widget. |
 | Backend | FastAPI REST API under `/api/v1`, authenticated chat WebSocket at `/ws/chat`, SQLAlchemy models, authorization, business services, rules, and orchestration. |
-| Database | PostgreSQL is the source of truth for accounts, patients, pathway templates, journeys, steps, events, actions, exceptions, agent runs, and chat history/audit. |
+| Database | PostgreSQL is the source of truth for accounts, patients, pathway templates, journeys, steps, events, actions, exceptions, notifications, agent runs, and chat history/audit. |
 | AI | Optional OpenAI-compatible MAQ AI client for a three-agent LangGraph workflow and a separate tool-using CarePath chat assistant. The orchestration graph has a rules-only fallback when AI is unavailable. |
-| Delivery | Patient-facing reminders and requests use SMTP when configured; otherwise local mock integrations record simulated outcomes. Coordinator tasks appear as in-app exceptions after staff approval. |
+| Delivery | Journey reminders appear as in-app notifications for patients and staff authorized for that journey. Document and appointment requests use SMTP when configured or local mock integrations otherwise. Coordinator tasks appear as in-app exceptions after staff approval. |
 
 Source entry points: [backend app](backend/app/main.py), [API router](backend/app/api/router.py), [frontend routes](frontend/src/routes/index.jsx), [database setup](backend/scripts/setup_database.py).
 
@@ -41,7 +41,7 @@ flowchart LR
     Agents <--> Model[Optional MAQ AI model]
     Graph --> Policy[Rules policy and action allowlist]
     Policy --> Executor[Action executor and verification]
-    Executor --> Delivery[SMTP or mock services]
+    Executor --> Delivery[In-app notifications, SMTP, or mock services]
     Executor --> DB
     Graph --> DB
 
@@ -62,9 +62,11 @@ The model can recommend a capability or propose a chat tool call. The server val
 2. The frontend sends the token on API requests. The backend reloads the account and applies role checks on protected endpoints.
 3. Staff see dashboard, patient, journey, exception, and agent activity views. Administrators also see user and pathway management. Patients see only journeys linked to their account.
 
-Administrators create patient accounts and may assign a clinician during creation or later in User management. A clinician can also claim an unassigned patient from the Patients directory. The API returns a generated temporary password once for the administrator to share; patients can change it from their account page. Public signup is disabled. A patient can have at most one clinician, while a clinician can care for many patients. See [admin API](backend/app/api/v1/admin.py), [authentication](backend/app/auth.py), and [authorization](backend/app/core/authorization.py).
+Administrators create patient accounts and may assign a clinician during creation or later in User management. Administrators grant patient access; staff cannot assign themselves patients. The API returns a generated temporary password once for the administrator to share; patients can change it from their account page. Public signup is disabled. A patient can have at most one clinician, while a clinician can care for many patients. See [admin API](backend/app/api/v1/admin.py), [authentication](backend/app/auth.py), and [authorization](backend/app/core/authorization.py).
 
-The clinician Patients page has All patients, My patients, and Blocked care views. The All patients directory shows assigned doctors and lets a clinician claim an unassigned patient. Administrators can assign an unassigned patient to a doctor from the Patients list or profile. Clinicians can open profiles and journeys for their assigned patients; administrators can open all profiles, and care coordinators can open their assigned patients.
+The clinician Patients page has My patients and Blocked care views, both restricted to assigned patients. Administrators can assign an unassigned patient to a doctor from the Patients list or profile. Patient lists, profiles, and journeys share the same access scope: all patients for administrators, assigned patients for clinicians and coordinators, and the linked personal record for patients.
+
+The Calendar tab provides day, week, and month views of booked journey activities and planned milestone/deadline dates. Staff can confirm booking, rescheduling, and cancellation within their patient scope; patients see their personal schedule. Bookings live on journey steps, appear in both journey timelines, and record changes in patient events. Search, care team, patient, journey status, activity status, and date filters cannot expand access. See [calendar implementation and API](backend/CALENDAR.md).
 
 ### 2. Pathway creation and journey start
 
@@ -104,7 +106,7 @@ If the model is disabled, unavailable, or returns unusable output, the graph swi
 
 ### 5. Action approval and delivery
 
-The action registry allows document requests, reminders, appointment requests, rescheduling, and coordinator task creation. The executor uses an idempotency key to avoid duplicate actions and stores each attempt. `CREATE_COORDINATOR_TASK` is recorded as `REQUESTED` until staff approve or reject it; approval creates an in-app task. Other patient-facing actions use configured SMTP or a mock service. [Action definitions](backend/app/action_registry/definitions.py) · [executor](backend/app/orchestration/action_executor.py) · [approval API](backend/app/api/v1/actions.py).
+The action registry allows document requests, reminders, appointment requests, rescheduling, and coordinator task creation. The executor uses an idempotency key to avoid duplicate actions and stores each attempt. Reminders create in-app notifications for the patient and staff authorized for that journey; the patient portal does not expose agent-run diagnostics. `CREATE_COORDINATOR_TASK` is recorded as `REQUESTED` until staff approve or reject it; approval creates an in-app task. Other patient-facing actions use configured SMTP or a mock service. [Action definitions](backend/app/action_registry/definitions.py) · [executor](backend/app/orchestration/action_executor.py) · [notification API](backend/app/api/v1/notifications.py) · [approval API](backend/app/api/v1/actions.py).
 
 ### 6. CarePath chat assistant
 
@@ -122,7 +124,7 @@ Recognizable instruction override attempts are rejected or removed from retrieve
 | Journey intelligence agent | Implemented; AI optional | Reads pathway, step, and recent event context; returns a validated JSON assessment of blockers and missing prerequisites. |
 | Coordination agent | Implemented; AI optional | Selects one action from the allowed action list for the current step; schema and action validation follow. |
 | Rules-only fallback | Implemented | Continues orchestration without usable AI and labels the run `RULES_ONLY`. |
-| Action executor and verifier | Implemented | Allowlisted actions, idempotency, approval gate, SMTP or mock delivery, execution status, and verification. |
+| Action executor and verifier | Implemented | Allowlisted actions, idempotency, approval gate, in-app reminders, SMTP or mock delivery, execution status, and verification. |
 | Agent reporting | Implemented | Stores individual agent runs and orchestration output, including mode, warnings, action outcomes, and step changes. |
 | Chat assistant | Implemented; AI provider required to respond | Role-aware read tools, proposed write tools, confirmation or rejection, history, audit, and prompt injection checks. |
 

@@ -72,10 +72,10 @@ active users. Each patient has a linked portal account. Step time limits are
 backfilled by the migrations. All demo passwords are `Test@123`, stored as
 bcrypt hashes. Hash generation can take several minutes.
 
-The setup assigns demo patients to their clinicians. Clinicians can browse the
-basic patient directory and claim an unassigned patient; they can open profiles
-and journeys only for patients assigned to them. Care coordinators see only
-patients granted to them in User management.
+The setup assigns demo patients to their clinicians. Clinicians can list and
+open only their assigned patients. Care coordinators see only patients granted
+to them in User management. Administrators manage assignments; staff cannot
+grant themselves patient access.
 
 Schema creation, migrations, seeding, and verification share one transaction;
 any failure rolls back the entire setup. The command refuses databases with
@@ -106,7 +106,12 @@ using a database migration account:
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261012_chat_access_and_audit.sql"
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261013_patient_provisioning_and_pathway_roles.sql"
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261014_refine_clinical_pathway_workflows.sql"
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261019_add_journey_calendar.sql"
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261026_add_in_app_notifications.sql"
 ```
+
+The [calendar guide](CALENDAR.md) describes calendar roles, endpoints, UTC booking
+storage, planned dates, and scheduling confirmations.
 
 The pathway migration publishes new versions of the six seeded care pathways,
 assigning role owners and operational step deadlines. Completed journeys retain
@@ -127,6 +132,11 @@ psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/Create Tabl
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/patient_journey_orchestrator_seed.sql"
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_02_add_step_owners.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261012_chat_access_and_audit.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261013_patient_provisioning_and_pathway_roles.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261014_refine_clinical_pathway_workflows.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261019_add_journey_calendar.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261026_add_in_app_notifications.sql"
 ```
 
 The seed creates 1,200 staff accounts and 1,200 patient accounts. Each patient
@@ -359,10 +369,10 @@ Public signup is disabled. Administrators create patients with an optional clini
 `POST /api/v1/admin/patients`; the temporary password appears once in the response.
 Patients change it through `POST /api/v1/auth/change-password`. Administrators
 create staff via `POST /api/v1/admin/users`. Existing patients can be assigned
-to a clinician with `PUT /api/v1/admin/users/{user_id}/patients/{patient_id}`;
-clinicians can also claim an unassigned patient with `POST /api/v1/patients/{patient_id}/claim`.
-The clinician directory shows all patients, while profile and journey access
-stays limited to assigned patients. Clinician assignments cannot be removed or changed. The assigned clinician
+to a clinician with `PUT /api/v1/admin/users/{user_id}/patients/{patient_id}`.
+Patient lists, profiles, journeys, and calendars are limited to assigned patients
+for clinicians and coordinators; patients can read only their own records.
+The legacy self-claim endpoint returns 403. Clinician assignments cannot be removed or changed. The assigned clinician
 starts journeys and chooses priority. Confirmations are signed for the user,
 session, exact action, patient, and parameters. The backend claims each proposal
 once and checks current role, patient grants, and business rules at execution.
@@ -414,9 +424,11 @@ Other behaviour: approval-gated actions (`CREATE_COORDINATOR_TASK`) are recorded
 
 **If the AI is unavailable or returns something unusable** (bad key, timeout, invalid JSON, unknown capability or action, made-up step id) the run does not fail: it continues on the built-in rules (`mode: RULES_ONLY`) and says so in the summary. The response and the saved run include `summary`, `mode`, `warnings` and `step_changes`. Saved runs use `status` SUCCESS/FAILED (DB enum); how the run ended (WAIT / ESCALATE) is `output.final_state`.
 
-### Real patient messages (SMTP)
+### In-app reminders and patient messages (SMTP)
 
-Reminders, document requests and appointment requests/reschedules are emailed to the patient's email on file when these are set in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty the actions are **simulated** and labelled "Simulated (email not configured)" everywhere in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). A patient with no email makes the action fail and the run escalate. Error text saved to `agent_runs` is scrubbed of API keys and tokens.
+Journey reminders are stored as in-app notifications for the patient, assigned clinician, assigned care coordinators, and active administrators. Each user can see only notifications for journeys they are authorized to access. The patient sees the care reminder; staff see that the reminder was triggered. Opening a notification marks it read and navigates to the journey. Patient portal pages do not show agent-run diagnostics.
+
+Document requests and appointment requests/reschedules are emailed to the patient's email on file when SMTP is configured in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty these email actions are simulated and labelled accordingly in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). Error text saved to `agent_runs` is scrubbed of API keys and tokens.
 
 ## Main endpoints
 
@@ -434,6 +446,8 @@ Search and filter parameters apply to the full set of records the caller may acc
 - `GET /api/v1/journeys/available-pathways` (staff)
 - `POST /api/v1/patients/{patient_id}/journeys` (administrator or assigned clinician; clinicians supply priority, administrators omit it; optional per-step time allowances)
 - `GET /api/v1/me/journeys` (signed-in patient)
+- `GET /api/v1/notifications` (signed-in user; role- and journey-scoped)
+- `PATCH /api/v1/notifications/{notification_id}/read` (mark a notification read)
 - `GET /api/v1/journeys`
 - `GET /api/v1/journeys/{journey_id}`
 - `PATCH /api/v1/journeys/{journey_id}/priority` (assigned clinician; active or blocked journeys)

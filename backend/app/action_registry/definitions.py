@@ -11,7 +11,7 @@ class ActionDefinition:
 
 ACTION_DEFINITIONS = {
     "REQUEST_DOCUMENT": ActionDefinition("REQUEST_DOCUMENT", "Request a missing diagnostic/report/document.", False, "request_document"),
-    "SEND_REMINDER": ActionDefinition("SEND_REMINDER", "Send an operational reminder/notification.", False, "send_reminder"),
+    "SEND_REMINDER": ActionDefinition("SEND_REMINDER", "Create an in-app journey reminder for the patient and authorized staff.", False, "send_reminder"),
     "REQUEST_APPOINTMENT": ActionDefinition("REQUEST_APPOINTMENT", "Submit a scheduling request.", False, "request_appointment"),
     "RESCHEDULE_APPOINTMENT": ActionDefinition("RESCHEDULE_APPOINTMENT", "Submit a rescheduling request when allowed.", False, "reschedule_appointment"),
     "CREATE_COORDINATOR_TASK": ActionDefinition(

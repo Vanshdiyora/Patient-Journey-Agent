@@ -7,10 +7,11 @@ from app.action_registry.registry import ActionRegistry
 from app.core.config import settings
 from app.core.exceptions import ActionNotAllowedError
 from app.integrations.email_delivery import EmailPatientService
-from app.integrations.mock import MockCommunicationService, MockDocumentService, MockSchedulingService
+from app.integrations.mock import MockDocumentService, MockSchedulingService
 from app.models import ActionExecution, ExceptionRecord, Journey
 from app.orchestration.idempotency import build_idempotency_key
 from app.orchestration.verification import VerificationLayer
+from app.services.reminder_notifications import create_journey_reminder_notifications
 
 
 def _now() -> datetime:
@@ -19,9 +20,9 @@ def _now() -> datetime:
 
 class ActionExecutor:
     """
-    Runs registry actions. Patient-facing actions (reminder, document request,
-    appointment request/reschedule) are delivered by email when SMTP is
-    configured and simulated otherwise; the response says which ("delivery").
+    Runs registry actions. Journey reminders are sent as in-app notifications
+    to the patient and staff with access to that journey. Other patient-facing
+    actions use email when SMTP is configured and simulated delivery otherwise.
     Coordinator tasks are real in-app tasks (an exception visible to staff).
     Approval-gated actions are recorded for staff approval unless the action
     explicitly permits a supervisor-agent self-approval.
@@ -33,11 +34,10 @@ class ActionExecutor:
         self.verifier = VerificationLayer()
         if settings.email_enabled:
             email = EmailPatientService(db)
-            self.scheduling = self.communication = self.document = email
+            self.scheduling = self.document = email
             self.delivery = "email"
         else:
             self.scheduling = MockSchedulingService()
-            self.communication = MockCommunicationService()
             self.document = MockDocumentService()
             self.delivery = "mock"
 
@@ -108,7 +108,7 @@ class ActionExecutor:
             if action_type == "REQUEST_DOCUMENT":
                 response = self.document.request_document(payload)
             elif action_type == "SEND_REMINDER":
-                response = self.communication.send_reminder(payload)
+                response = create_journey_reminder_notifications(self.db, execution.journey_id, payload)
             elif action_type == "REQUEST_APPOINTMENT":
                 response = self.scheduling.request_appointment(payload)
             elif action_type == "RESCHEDULE_APPOINTMENT":

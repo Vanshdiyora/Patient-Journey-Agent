@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID, ENUM
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
@@ -32,6 +32,13 @@ class JourneyStep(Base):
     owner_role: Mapped[str] = mapped_column(String, default="CLINICIAN")
     time_limit_hours: Mapped[int | None] = mapped_column(Integer)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bookings are distinct from clinical deadlines. One activity has one
+    # current booking; changes are recorded in patient_events.
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_staff_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
+    schedule_status: Mapped[str | None] = mapped_column(String(20))
+    schedule_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     block_reason: Mapped[str | None] = mapped_column(Text)

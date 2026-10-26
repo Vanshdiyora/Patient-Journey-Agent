@@ -41,6 +41,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
+    patient_id: UUID | None = None
 
     @field_validator("email", mode="before")
     @classmethod
@@ -75,6 +76,7 @@ def user_response(user: User) -> dict[str, Any]:
         "email": user.email,
         "name": user.display_name or user.email.split("@")[0].replace(".", " ").title(),
         "role": user.role,
+        "patient_id": str(user.patient_id) if user.patient_id else None,
     }
 
 

@@ -1,0 +1,323 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Plus, Search, ShieldCheck, UserCog, X } from "lucide-react";
+import { adminApi, patientsApi } from "../../../services/index";
+import { useAsync } from "../../../hooks/useAsync";
+import { getErrorMessage, humanize, toList } from "../../../utils/index";
+import { useConfirm } from "../../../components/ConfirmModal";
+import { useToast } from "../../../context/ToastContext";
+import { PageHeading, Panel, EmptyState, ErrorState, Badge, SkeletonRows, AlertBanner, Select, Pagination } from "../../../components/index";
+import { ROLES } from "../../../utils/roles";
+import StaffCreateDrawer from "../components/StaffCreateDrawer";
+
+export default function UserManagement() {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [userSearch, setUserSearch] = useState("");
+  const { data, loading, error } = useAsync(() => adminApi.users({ limit: 10, offset, search: userSearch || undefined }), [refreshKey, offset, userSearch]);
+  const users = toList(data, "items", "users");
+  const [saving, setSaving] = useState("");
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [patientSearch, setPatientSearch] = useState("");
+  const accessCloseButton = useRef(null);
+  const accessReturnFocus = useRef(null);
+  const [staffDrawerOpen, setStaffDrawerOpen] = useState(false);
+  const closeStaffDrawer = useCallback(() => setStaffDrawerOpen(false), []);
+  const [assignmentRefresh, setAssignmentRefresh] = useState(0);
+  const { data: assignments, loading: assignmentsLoading } = useAsync(
+    () => selectedStaff ? adminApi.patientAssignments(selectedStaff.id) : Promise.resolve({ patient_ids: [] }),
+    [selectedStaff?.id, assignmentRefresh],
+  );
+  const { data: matchingPatients } = useAsync(
+    () => patientSearch.trim() ? patientsApi.list({ search: patientSearch.trim(), limit: 10 }) : Promise.resolve({ items: [] }),
+    [patientSearch],
+  );
+  const [feedback, setFeedback] = useState(null);
+  const [confirm, confirmModal] = useConfirm();
+  const toast = useToast();
+
+  useEffect(() => {
+    if (!selectedStaff) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    accessCloseButton.current?.focus();
+    const onKeyDown = event => {
+      if (document.querySelector(".modal-backdrop")) return;
+      if (event.key === "Escape") {
+        setSelectedStaff(null);
+        setPatientSearch("");
+        return;
+      }
+      if (event.key !== "Tab") return;
+      if (!document.querySelector(".patient-access-dialog")?.contains(document.activeElement)) return;
+      const focusable = [...document.querySelectorAll(
+        ".patient-access-dialog button:not([disabled]), .patient-access-dialog input:not([disabled])",
+      )];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      accessReturnFocus.current?.focus();
+    };
+  }, [selectedStaff]);
+
+  const closePatientAccess = () => {
+    setSelectedStaff(null);
+    setPatientSearch("");
+  };
+
+  const setRole = async (u, role) => {
+    if (role === u.role) return;
+    const ok = await confirm({
+      title: `Change role to ${humanize(role)}?`,
+      message: `${u.display_name || u.email} will immediately gain the permissions of the ${humanize(role)} role.`,
+      confirmLabel: "Change role",
+      intent: "primary",
+    });
+    if (!ok) {
+      setRefreshKey(k => k + 1); // revert the Select to the stored role
+      return;
+    }
+    await applyRole(u, role);
+  };
+
+  const applyRole = async (u, role) => {
+    setSaving(u.id);
+    try {
+      await adminApi.setUserRole(u.id, { role });
+      toast.success(`${u.display_name || u.email} is now ${humanize(role)}.`);
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      setRefreshKey(k => k + 1);
+    } setSaving("");
+  };
+
+  const toggleActive = async (u) => {
+    const ok = await confirm({
+      title: u.is_active ? "Deactivate this account?" : "Reactivate this account?",
+      message: u.is_active
+        ? `${u.display_name || u.email} will immediately lose access to the workspace.`
+        : `${u.display_name || u.email} will regain access to the workspace.`,
+      confirmLabel: u.is_active ? "Deactivate" : "Reactivate",
+      intent: u.is_active ? "danger" : "primary",
+    });
+    if (!ok) return;
+    setSaving(u.id);
+    try {
+      await adminApi.setUserActive(u.id, { is_active: !u.is_active });
+      toast.success(`${u.display_name || u.email} ${u.is_active ? "deactivated" : "reactivated"}.`);
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } setSaving("");
+  };
+
+  const staffCreated = () => {
+    setStaffDrawerOpen(false);
+    setOffset(0);
+    setRefreshKey(k => k + 1);
+    toast.success("Staff account created.");
+  };
+
+  const changeAssignment = async (patientId, assign) => {
+    const staff = selectedStaff;
+    if (!staff) return;
+    if (!assign) {
+      const ok = await confirm({
+        title: "Remove patient access?",
+        message: `${staff.display_name || staff.email} will immediately lose access to this patient and their journeys.`,
+        confirmLabel: "Remove access",
+        intent: "danger",
+      });
+      if (!ok) return;
+    }
+    setSaving(patientId);
+    try {
+      if (assign) await adminApi.assignPatient(staff.id, patientId);
+      else await adminApi.unassignPatient(staff.id, patientId);
+      setAssignmentRefresh(k => k + 1);
+      toast.success(assign ? "Patient access granted." : "Patient access removed.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSaving("");
+    }
+  };
+
+  return <div>
+    <PageHeading
+      eyebrow="Administration"
+      title="User management"
+      description="Manage application identities, roles and activation status."
+      actions={<button className="primary-btn" type="button" onClick={() => setStaffDrawerOpen(true)}><Plus size={16} /> Create staff account</button>}
+    />
+    {staffDrawerOpen && <StaffCreateDrawer onClose={closeStaffDrawer} onCreated={staffCreated} />}
+    <Panel title="Application users" subtitle={`${data?.total ?? users.length} registered identities`} headerIcon={UserCog}>
+      <div className="user-management-search">
+        <label htmlFor="user-management-search">Find a user</label>
+        <div className="search-field">
+          <Search size={15} aria-hidden="true" />
+          <input id="user-management-search" type="search" value={userSearch} onChange={event => { setUserSearch(event.target.value); setOffset(0); }} placeholder="Search doctor name or email" />
+        </div>
+      </div>
+      {feedback && <div style={{ padding: "0 18px" }}><AlertBanner tone={feedback.tone}>{feedback.text}</AlertBanner></div>}
+      {error ? <ErrorState error={error} title="Could not load users" /> :
+        loading ? <SkeletonRows /> :
+          users.length ? (
+            <div className="table-wrap"><table>
+              <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>{users.map(u => (
+                <tr key={u.id}>
+                  <td><div className="person-cell">
+                    <div className="person-avatar">{(u.display_name || u.email)[0].toUpperCase()}</div>
+                    <div><span className="table-primary">{u.display_name || u.email}</span><span>{u.email}</span></div>
+                  </div></td>
+                  <td>
+                    <Select
+                      value={u.role}
+                      disabled={saving === u.id || u.role === ROLES.PATIENT}
+                      onChange={v => setRole(u, v)}
+                      options={(u.role === ROLES.PATIENT ? [ROLES.PATIENT] : [ROLES.ADMIN, ROLES.CLINICIAN, ROLES.CARE_COORDINATOR]).map(r => ({ value: r, label: humanize(r) }))}
+                      className="role-select"
+                    />
+                  </td>
+                  <td><Badge kind="status" value={u.is_active ? "active" : "cancelled"} fallback={u.is_active ? "Active" : "Inactive"} /></td>
+                  <td>
+                    {(u.role === ROLES.CLINICIAN || u.role === ROLES.CARE_COORDINATOR) && (
+                      <button
+                        className="secondary-btn"
+                        type="button"
+                        onClick={event => {
+                          accessReturnFocus.current = event.currentTarget;
+                          setPatientSearch("");
+                          setSelectedStaff(u);
+                        }}
+                      >
+                        Patient access
+                      </button>
+                    )}
+                    <button className="secondary-btn" disabled={saving === u.id} onClick={() => toggleActive(u)}>
+                      {u.is_active ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          ) : <EmptyState icon={ShieldCheck} title="No users" text="No identities are registered yet." />}
+      {!loading && !error && <Pagination offset={offset} count={users.length} total={data?.total ?? 0} onPage={setOffset} />}
+    </Panel>
+    {selectedStaff && createPortal(
+      <div
+        className="patient-access-backdrop"
+        onMouseDown={event => {
+          if (event.target === event.currentTarget) closePatientAccess();
+        }}
+      >
+        <section
+          className="patient-access-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="patient-access-title"
+          aria-describedby="patient-access-description"
+        >
+          <header className="patient-access-header">
+            <div>
+              <span className="eyebrow">User management</span>
+              <h2 id="patient-access-title">Patient access</h2>
+              <p id="patient-access-description">
+                Manage patients assigned to {selectedStaff.display_name || selectedStaff.email}.
+              </p>
+            </div>
+            <button
+              ref={accessCloseButton}
+              className="icon-btn"
+              type="button"
+              aria-label="Close patient access dialog"
+              onClick={closePatientAccess}
+            >
+              <X size={18} />
+            </button>
+          </header>
+          <div className="patient-access-content">
+            <section className="patient-access-section" aria-labelledby="assigned-patients-title">
+              <h3 id="assigned-patients-title">Assigned patients</h3>
+              {assignmentsLoading ? <SkeletonRows /> : (assignments?.patients || []).length ? (
+                <ul className="patient-access-list">
+                  {assignments.patients.map(patient => (
+                    <li key={patient.id}>
+                      <span><strong>{patient.name}</strong><small>{patient.reference}</small></span>
+                      {selectedStaff.role !== ROLES.CLINICIAN && (
+                        <button
+                          className="secondary-btn"
+                          type="button"
+                          disabled={saving === patient.id}
+                          onClick={() => changeAssignment(patient.id, false)}
+                        >
+                          {saving === patient.id ? "Removing…" : "Remove access"}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="patient-access-empty">No patients assigned.</p>}
+            </section>
+            <section className="patient-access-section" aria-labelledby="find-patient-title">
+              <h3 id="find-patient-title">Add a patient</h3>
+              <div className="patient-access-search">
+                <label htmlFor="patient-access-search">Search by name or reference</label>
+                <div className="search-field">
+                  <Search size={15} aria-hidden="true" />
+                  <input
+                    id="patient-access-search"
+                    type="search"
+                    value={patientSearch}
+                    onChange={event => setPatientSearch(event.target.value)}
+                    placeholder="Search name or reference"
+                  />
+                </div>
+              </div>
+              {patientSearch.trim() && (
+                <ul className="patient-access-list patient-access-results">
+                  {toList(matchingPatients, "items", "patients").map(patient => {
+                    const alreadyAssigned = (assignments?.patient_ids || []).includes(patient.id);
+                    const alreadyHasClinician = selectedStaff.role === ROLES.CLINICIAN && Boolean(patient.assigned_clinician_id);
+                    return (
+                      <li key={patient.id}>
+                        <span>
+                          <strong>{patient.first_name} {patient.last_name}</strong>
+                          <small>{patient.patient_reference}</small>
+                        </span>
+                        <button
+                          className={alreadyAssigned ? "secondary-btn" : "primary-btn"}
+                          type="button"
+                          disabled={saving === patient.id || alreadyAssigned || alreadyHasClinician}
+                          onClick={() => changeAssignment(patient.id, true)}
+                        >
+                          {saving === patient.id ? "Adding…" : alreadyAssigned ? "Assigned" : alreadyHasClinician ? "Already assigned to a doctor" : "Grant access"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+        </section>
+      </div>,
+      document.body,
+    )}
+    {confirmModal}
+  </div>;
+}
