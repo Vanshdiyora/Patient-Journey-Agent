@@ -46,7 +46,7 @@ function ActionOutcome({ item }) {
     <div className="run-outcome-head">
       <strong>{label}{a.step_name ? ` - ${a.step_name}` : ""}</strong>
       <span className="run-outcome-tag">
-        {a.awaiting_approval ? "Waiting for staff approval" : a.status === "FAILED" ? "Failed" : a.duplicate ? "Already sent earlier" : a.delivery === "mock" ? "Simulated (email not configured)" : a.delivery === "in_app" ? "Task created" : "Sent and verified"}
+        {a.awaiting_approval ? "Waiting for staff approval" : a.status === "FAILED" ? "Failed" : a.duplicate ? "Already sent earlier" : a.delivery === "mock" ? "Simulated (email not configured)" : a.delivery === "in_app" ? a.action_type === "SEND_REMINDER" ? "In-app notifications sent" : "Task created" : "Sent and verified"}
       </span>
     </div>
     {a.reason && <p>Why: {a.reason}</p>}
@@ -139,6 +139,6 @@ export default function AgentRunDetails({ run }) {
         {call.reason && call.operation !== "ai_unavailable" && <small>{call.reason}</small>}
       </li>)}</ol>
     </details>}
-    <p className="run-boundary">Operational support only. Patient messages are emailed when SMTP is configured, otherwise simulated; staff should verify follow-up.</p>
+    <p className="run-boundary">Operational support only. Journey reminders are sent in-app to the patient and staff with access to the journey; staff should verify follow-up.</p>
   </div>;
 }

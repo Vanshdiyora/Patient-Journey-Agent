@@ -55,7 +55,7 @@ def send_email(to: str, subject: str, body: str) -> dict[str, Any]:
 
 
 class EmailPatientService:
-    """Patient-facing reminders and requests, sent to the patient's email on file."""
+    """Patient-facing document and appointment requests sent by email."""
 
     def __init__(self, db: Session):
         self.db = db
@@ -78,12 +78,6 @@ class EmailPatientService:
     @staticmethod
     def _step(payload: dict[str, Any]) -> str:
         return payload.get("step_name") or "your care plan"
-
-    def send_reminder(self, payload):
-        return self._send(payload, "A reminder from your care team", [
-            f"This is a friendly reminder about: {self._step(payload)}.",
-            "Please complete it or contact your care team if you need help.",
-        ])
 
     def request_document(self, payload):
         return self._send(payload, "Document needed for your care", [

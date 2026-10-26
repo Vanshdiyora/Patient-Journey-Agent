@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from app.core.dependencies import get_current_user
 from app.auth import UserResponse, user_response
-from app.api.v1 import health, patients, journeys, events, exceptions, agents, actions, dashboard, me, admin, pathways
+from app.api.v1 import health, patients, journeys, events, exceptions, agents, actions, dashboard, me, admin, pathways, notifications
 from app.api.v1.chat import router as chat_router
 from app.api.v1.calendar import router as calendar_router
 from app.auth import router as auth_router
@@ -17,6 +17,7 @@ api_router.include_router(journeys.router, tags=["journeys"])
 api_router.include_router(events.router, tags=["events"])
 api_router.include_router(exceptions.router, tags=["exceptions"])
 api_router.include_router(agents.router, tags=["agents"])
+api_router.include_router(notifications.router)
 api_router.include_router(actions.router, tags=["actions"])
 api_router.include_router(dashboard.router, tags=["dashboard"])
 api_router.include_router(chat_router, tags=["chat"])

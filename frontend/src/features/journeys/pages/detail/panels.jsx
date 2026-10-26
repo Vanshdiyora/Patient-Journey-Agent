@@ -57,11 +57,14 @@ export function ActionsPanel({ actionRows, loading, error, busy, onDecide, offse
         </div>}
       </div>}
       {a.response_payload?.delivery && a.status === "SUCCESS" && <small className="journey-action-delivery">
-        {a.response_payload.delivery === "email" ? "Delivered by email" : a.response_payload.delivery === "in_app" ? "Created as an in-app task" : "Simulated - email is not configured"}
+        {a.action_type === "SEND_REMINDER" ? "In-app notifications sent"
+          : a.response_payload.delivery === "email" ? "Delivered by email"
+            : a.response_payload.delivery === "in_app" ? "Created as an in-app task"
+              : "Simulated - email is not configured"}
       </small>}
       {a.error_message && <p className="form-error">{a.error_message}</p>}
     </div>)}</div> : <EmptyState small title="No actions recorded" text="Orchestration may decide to wait or escalate without executing an action." />}
     {!loading && !error && <Pagination offset={offset} count={actionRows.length} total={total ?? 0} onPage={onPage} />}
-    <p className="run-boundary">Reminders and requests are emailed to patients when SMTP is configured; otherwise they are simulated and labelled as such.</p>
+    <p className="run-boundary">Reminders are sent in-app to the patient and staff who can access the journey. Other patient requests use configured email delivery or a simulated service.</p>
   </Panel>;
 }

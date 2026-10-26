@@ -107,6 +107,7 @@ psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261012_chat
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261013_patient_provisioning_and_pathway_roles.sql"
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261014_refine_clinical_pathway_workflows.sql"
 psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261019_add_journey_calendar.sql"
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f "backend/migrations/20261026_add_in_app_notifications.sql"
 ```
 
 The [calendar guide](CALENDAR.md) describes calendar roles, endpoints, UTC booking
@@ -131,6 +132,11 @@ psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/Create Tabl
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "db/patient_journey_orchestrator_seed.sql"
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_add_step_time_limits.sql"
 psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261007_02_add_step_owners.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261012_chat_access_and_audit.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261013_patient_provisioning_and_pathway_roles.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261014_refine_clinical_pathway_workflows.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261019_add_journey_calendar.sql"
+psql -h localhost -U postgres -d patient_journey_orchestrator -f "backend/migrations/20261026_add_in_app_notifications.sql"
 ```
 
 The seed creates 1,200 staff accounts and 1,200 patient accounts. Each patient
@@ -418,9 +424,11 @@ Other behaviour: approval-gated actions (`CREATE_COORDINATOR_TASK`) are recorded
 
 **If the AI is unavailable or returns something unusable** (bad key, timeout, invalid JSON, unknown capability or action, made-up step id) the run does not fail: it continues on the built-in rules (`mode: RULES_ONLY`) and says so in the summary. The response and the saved run include `summary`, `mode`, `warnings` and `step_changes`. Saved runs use `status` SUCCESS/FAILED (DB enum); how the run ended (WAIT / ESCALATE) is `output.final_state`.
 
-### Real patient messages (SMTP)
+### In-app reminders and patient messages (SMTP)
 
-Reminders, document requests and appointment requests/reschedules are emailed to the patient's email on file when these are set in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty the actions are **simulated** and labelled "Simulated (email not configured)" everywhere in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). A patient with no email makes the action fail and the run escalate. Error text saved to `agent_runs` is scrubbed of API keys and tokens.
+Journey reminders are stored as in-app notifications for the patient, assigned clinician, assigned care coordinators, and active administrators. Each user can see only notifications for journeys they are authorized to access. The patient sees the care reminder; staff see that the reminder was triggered. Opening a notification marks it read and navigates to the journey. Patient portal pages do not show agent-run diagnostics.
+
+Document requests and appointment requests/reschedules are emailed to the patient's email on file when SMTP is configured in `backend/.env` (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_USE_TLS`. With `SMTP_HOST` empty these email actions are simulated and labelled accordingly in the UI. While testing, set `SMTP_REDIRECT_TO=you@example.com` so every email goes to you instead of patients (the demo data uses fake addresses). Error text saved to `agent_runs` is scrubbed of API keys and tokens.
 
 ## Main endpoints
 
@@ -438,6 +446,8 @@ Search and filter parameters apply to the full set of records the caller may acc
 - `GET /api/v1/journeys/available-pathways` (staff)
 - `POST /api/v1/patients/{patient_id}/journeys` (administrator or assigned clinician; clinicians supply priority, administrators omit it; optional per-step time allowances)
 - `GET /api/v1/me/journeys` (signed-in patient)
+- `GET /api/v1/notifications` (signed-in user; role- and journey-scoped)
+- `PATCH /api/v1/notifications/{notification_id}/read` (mark a notification read)
 - `GET /api/v1/journeys`
 - `GET /api/v1/journeys/{journey_id}`
 - `PATCH /api/v1/journeys/{journey_id}/priority` (assigned clinician; active or blocked journeys)

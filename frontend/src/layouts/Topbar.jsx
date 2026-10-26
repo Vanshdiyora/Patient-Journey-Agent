@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { portalFor } from "./portals";
 import { isAdmin } from "../utils/roles";
+import NotificationCenter from "../features/notifications/components/NotificationCenter";
 
 /**
  * Topbar — sticky header with portal label, breadcrumb, search and avatar.
@@ -27,6 +28,7 @@ export default function Topbar({ onOpenMenu }) {
       </div>
       <div className="topbar-right">
         <div className="global-search"><Search size={17} /><input placeholder="Search patients, journeys…" /><kbd>⌘ K</kbd></div>
+        <NotificationCenter />
         <div className="avatar" title={`${displayName} — ${portal.label}`}>{initials}</div>
       </div>
     </header>

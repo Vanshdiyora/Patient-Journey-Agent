@@ -11,9 +11,9 @@ Deterministic rules and verified actions control journey state; three optional A
 | --- | --- |
 | Frontend | React 19 and Vite 7 portals for administrators, clinicians, care coordinators, and patients; dashboard, journey views, pathway and user management, and chat widget. |
 | Backend | FastAPI REST API under `/api/v1`, authenticated chat WebSocket at `/ws/chat`, SQLAlchemy models, authorization, business services, rules, and orchestration. |
-| Database | PostgreSQL is the source of truth for accounts, patients, pathway templates, journeys, steps, events, actions, exceptions, agent runs, and chat history/audit. |
+| Database | PostgreSQL is the source of truth for accounts, patients, pathway templates, journeys, steps, events, actions, exceptions, notifications, agent runs, and chat history/audit. |
 | AI | Optional OpenAI-compatible MAQ AI client for a three-agent LangGraph workflow and a separate tool-using CarePath chat assistant. The orchestration graph has a rules-only fallback when AI is unavailable. |
-| Delivery | Patient-facing reminders and requests use SMTP when configured; otherwise local mock integrations record simulated outcomes. Coordinator tasks appear as in-app exceptions after staff approval. |
+| Delivery | Journey reminders appear as in-app notifications for patients and staff authorized for that journey. Document and appointment requests use SMTP when configured or local mock integrations otherwise. Coordinator tasks appear as in-app exceptions after staff approval. |
 
 Source entry points: [backend app](backend/app/main.py), [API router](backend/app/api/router.py), [frontend routes](frontend/src/routes/index.jsx), [database setup](backend/scripts/setup_database.py).
 
@@ -41,7 +41,7 @@ flowchart LR
     Agents <--> Model[Optional MAQ AI model]
     Graph --> Policy[Rules policy and action allowlist]
     Policy --> Executor[Action executor and verification]
-    Executor --> Delivery[SMTP or mock services]
+    Executor --> Delivery[In-app notifications, SMTP, or mock services]
     Executor --> DB
     Graph --> DB
 
@@ -106,7 +106,7 @@ If the model is disabled, unavailable, or returns unusable output, the graph swi
 
 ### 5. Action approval and delivery
 
-The action registry allows document requests, reminders, appointment requests, rescheduling, and coordinator task creation. The executor uses an idempotency key to avoid duplicate actions and stores each attempt. `CREATE_COORDINATOR_TASK` is recorded as `REQUESTED` until staff approve or reject it; approval creates an in-app task. Other patient-facing actions use configured SMTP or a mock service. [Action definitions](backend/app/action_registry/definitions.py) · [executor](backend/app/orchestration/action_executor.py) · [approval API](backend/app/api/v1/actions.py).
+The action registry allows document requests, reminders, appointment requests, rescheduling, and coordinator task creation. The executor uses an idempotency key to avoid duplicate actions and stores each attempt. Reminders create in-app notifications for the patient and staff authorized for that journey; the patient portal does not expose agent-run diagnostics. `CREATE_COORDINATOR_TASK` is recorded as `REQUESTED` until staff approve or reject it; approval creates an in-app task. Other patient-facing actions use configured SMTP or a mock service. [Action definitions](backend/app/action_registry/definitions.py) · [executor](backend/app/orchestration/action_executor.py) · [notification API](backend/app/api/v1/notifications.py) · [approval API](backend/app/api/v1/actions.py).
 
 ### 6. CarePath chat assistant
 
@@ -124,7 +124,7 @@ Recognizable instruction override attempts are rejected or removed from retrieve
 | Journey intelligence agent | Implemented; AI optional | Reads pathway, step, and recent event context; returns a validated JSON assessment of blockers and missing prerequisites. |
 | Coordination agent | Implemented; AI optional | Selects one action from the allowed action list for the current step; schema and action validation follow. |
 | Rules-only fallback | Implemented | Continues orchestration without usable AI and labels the run `RULES_ONLY`. |
-| Action executor and verifier | Implemented | Allowlisted actions, idempotency, approval gate, SMTP or mock delivery, execution status, and verification. |
+| Action executor and verifier | Implemented | Allowlisted actions, idempotency, approval gate, in-app reminders, SMTP or mock delivery, execution status, and verification. |
 | Agent reporting | Implemented | Stores individual agent runs and orchestration output, including mode, warnings, action outcomes, and step changes. |
 | Chat assistant | Implemented; AI provider required to respond | Role-aware read tools, proposed write tools, confirmation or rejection, history, audit, and prompt injection checks. |
 
